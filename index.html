@@ -67,15 +67,6 @@
           }
         }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/"
-  }
-}
-</script>
 </head>
 <body class="bg-amber-50 text-gray-900 dark:bg-slate-900 dark:text-slate-200 font-sans">
     <div id="root"></div>
@@ -527,29 +518,19 @@ const ScheduleTab = ({ tasks, onTaskChange }) => {
                   <tr key={index} className="hover:bg-amber-50/70 dark:hover:bg-slate-700/50">
                     <td className="p-4 align-top">
                       {showDate && (
-                        <EditableField 
-                          as="div" 
-                          initialValue={task.date} 
-                          onSave={(v) => onTaskChange(index, 'date', v)} 
-                          className="font-semibold text-gray-900 dark:text-slate-200"
-                        />
+                        <div className="font-semibold text-gray-900 dark:text-slate-200">{task.date}</div>
                       )}
                     </td>
                     <td className="p-4 align-top">
                       {showDate && (
-                        <EditableField 
-                          as="div" 
-                          initialValue={task.day} 
-                          onSave={(v) => onTaskChange(index, 'day', v)}
-                          className="text-gray-900 dark:text-slate-200"
-                        />
+                         <div className="text-gray-900 dark:text-slate-200">{task.day}</div>
                       )}
                     </td>
                     <td className={`p-4 align-top font-medium ${task.highlight || 'text-gray-800 dark:text-slate-300'}`}>
-                      <EditableField as="div" initialValue={task.task} onSave={(v) => onTaskChange(index, 'task', v)} />
+                      <div>{task.task}</div>
                     </td>
                     <td className={`p-4 align-top ${task.highlight?.includes('red') ? 'font-bold text-red-700 dark:text-red-500' : 'text-gray-800 dark:text-slate-300'}`}>
-                      <EditableField as="div" initialValue={task.notes} onSave={(v) => onTaskChange(index, 'notes', v)} />
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{task.notes}</div>
                     </td>
                   </tr>
                 )
@@ -975,6 +956,7 @@ const OverviewTab = ({ details, tasks, onDetailChange }) => {
 // --- From App.tsx ---
 const App = () => {
   const { useState, useMemo, useEffect } = React;
+
   const LOCAL_STORAGE_KEY = 'npi-meeting-board-state';
 
   const initialProjectDetails = { id: 'Enter Project ID', quantity: 0, pcbSize: '0 x 0 x 0 mm', targetShipDate: '' };
@@ -1201,31 +1183,16 @@ const App = () => {
     </div>
   );
 };
-
-
-// --- From index.tsx ---
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-}
-    </script>
-
-    <!-- PWA Service Worker -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./service-worker.js').then(registration => {
-            console.log('ServiceWorker registration successful with scope: ', registration.scope);
-          }, err => {
-            console.log('ServiceWorker registration failed: ', err);
-          });
-        });
-      }
-    </script>
+    // Final Render call from index.tsx
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(
+            <React.StrictMode>
+                <App />
+            </React.StrictMode>
+        );
+    }
+</script>
 </body>
 </html>
