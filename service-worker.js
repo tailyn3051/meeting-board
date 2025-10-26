@@ -1,4 +1,4 @@
-const CACHE_NAME = 'npi-meeting-board-v7'; // Incremented version
+const CACHE_NAME = 'npi-meeting-board-v8'; // Incremented version
 const urlsToCache = [
   './',
   './index.html',
