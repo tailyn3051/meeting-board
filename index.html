@@ -391,7 +391,7 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
 
 
 // --- From components/Header.tsx ---
-const Header = ({ projectName, onProjectNameChange, onSaveAsPdf, appTitle, onAppTitleChange }) => {
+const Header = ({ projectName, onProjectNameChange, onSaveAsPdf, appTitle, onAppTitleChange, onReset }) => {
     return (
         <header className="mb-6">
             <div className="flex justify-between items-start">
@@ -414,15 +414,26 @@ const Header = ({ projectName, onProjectNameChange, onSaveAsPdf, appTitle, onApp
                         />
                     </div>
                 </div>
-                <button
-                    onClick={onSaveAsPdf}
-                    className="no-print group ml-4 mt-1 p-2.5 rounded-xl border border-gray-300/80 dark:border-slate-600 bg-gray-200/60 dark:bg-slate-700 shadow-sm hover:bg-gray-200 dark:hover:bg-slate-600 active:shadow-inner transition-all duration-200"
-                    title="Save as PDF"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600 dark:text-slate-300 transition-colors group-hover:text-gray-800 dark:group-hover:text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                </button>
+                <div className="flex items-start space-x-2">
+                    <button
+                        onClick={onReset}
+                        className="no-print group mt-1 p-2.5 rounded-xl border border-gray-300/80 dark:border-slate-600 bg-gray-200/60 dark:bg-slate-700 shadow-sm hover:bg-gray-200 dark:hover:bg-slate-600 active:shadow-inner transition-all duration-200"
+                        title="Reset Data"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600 dark:text-slate-300 transition-colors group-hover:text-gray-800 dark:group-hover:text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                           <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.182-3.182m0-11.667a8.25 8.25 0 00-11.667 0L2.985 7.982" />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={onSaveAsPdf}
+                        className="no-print group mt-1 p-2.5 rounded-xl border border-gray-300/80 dark:border-slate-600 bg-gray-200/60 dark:bg-slate-700 shadow-sm hover:bg-gray-200 dark:hover:bg-slate-600 active:shadow-inner transition-all duration-200"
+                        title="Save as PDF"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600 dark:text-slate-300 transition-colors group-hover:text-gray-800 dark:group-hover:text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </header>
     );
@@ -1151,10 +1162,24 @@ const App = () => {
 
   const handleSaveAsPdf = () => window.print();
 
+  const handleReset = () => {
+    if (window.confirm('Are you sure you want to reset all data to the default template? This action cannot be undone.')) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      window.location.reload();
+    }
+  };
+
   return (
     <div className="min-h-screen p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 sm:p-6 md:p-8 border border-amber-200 dark:border-slate-700 print-container">
-        <Header projectName={projectDetails.id} onProjectNameChange={handleProjectNameChange} onSaveAsPdf={handleSaveAsPdf} appTitle={appTitle} onAppTitleChange={handleAppTitleChange} />
+        <Header 
+            projectName={projectDetails.id} 
+            onProjectNameChange={handleProjectNameChange} 
+            onSaveAsPdf={handleSaveAsPdf} 
+            appTitle={appTitle} 
+            onAppTitleChange={handleAppTitleChange}
+            onReset={handleReset}
+        />
         <Tabs tabs={TABS} activeTab={activeTab} onTabClick={setActiveTab} />
         <main>
           <div className={activeTab === '總覽與時程 (Overview & Schedule)' ? '' : 'hidden print-show'}>
@@ -1179,6 +1204,9 @@ const App = () => {
             </TabContentWrapper>
           </div>
         </main>
+        <footer className="text-center text-xs text-gray-400 dark:text-slate-500 mt-8">
+            ver-0.3
+        </footer>
       </div>
     </div>
   );
