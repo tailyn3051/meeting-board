@@ -244,25 +244,24 @@ const GanttChart = ({ data }) => {
   return (
     <div className="relative font-sans text-sm">
       <div className="print:hidden">
-        <div className="grid gap-y-2">
+        <div className="grid gap-y-1">
           {data.map((task, index) => {
               const leftPercentage = (getDaysFromStart(task.start) / totalDays) * 100;
               const widthPercentage = ((task.end.getTime() - task.start.getTime()) / (1000 * 3600 * 24) / totalDays) * 100;
 
               return (
-                <div key={task.name} className="flex items-center h-10">
+                <div key={task.name} className="flex items-center h-4">
                   <div className="w-40 pr-4 text-right text-gray-700 dark:text-slate-300 truncate">{task.name}</div>
-                  <div className="flex-1 bg-gray-200 dark:bg-slate-700 rounded-lg h-6 relative overflow-hidden">
+                  <div className="flex-1 bg-gray-200 dark:bg-slate-700 rounded-sm h-2.5 relative overflow-hidden">
                     <div
-                      className={`absolute h-full rounded-lg ${colors[index % colors.length]}`}
+                      className={`absolute h-full rounded-sm ${colors[index % colors.length]}`}
                       style={{
                         left: `${leftPercentage}%`,
                         width: `${widthPercentage}%`,
                       }}
+                      title={`${task.name}: ${formatDate(task.start)} to ${formatDate(task.end)}`}
                     >
-                      <span className="absolute inset-0 flex items-center justify-center text-white text-xs font-semibold px-2 truncate">
-                        {task.name}
-                      </span>
+                      {/* Text label removed for compactness */}
                     </div>
                   </div>
                 </div>
@@ -774,6 +773,10 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
         const formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
 
         onBulkStepDateChange(selectedStepIds, editingDateField, formattedDate);
+
+        if (editingDateField === 'startDate') {
+            setEditingDateField('endDate');
+        }
     }
   };
   
@@ -1205,7 +1208,7 @@ const App = () => {
           </div>
         </main>
         <footer className="text-center text-xs text-gray-400 dark:text-slate-500 mt-8">
-            ver-0.3
+            ver-0.4
         </footer>
       </div>
     </div>
