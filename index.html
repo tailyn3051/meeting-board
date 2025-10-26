@@ -225,52 +225,88 @@ const GanttChart = ({ data }) => {
   const minDate = new Date(Math.min(...data.map(task => task.start.getTime())));
   const maxDate = new Date(Math.max(...data.map(task => task.end.getTime())));
   
-  minDate.setDate(minDate.getDate() - 2);
-  maxDate.setDate(maxDate.getDate() + 2);
+  minDate.setDate(minDate.getDate() - 1);
+  maxDate.setDate(maxDate.getDate() + 1);
 
-  const totalDays = (maxDate.getTime() - minDate.getTime()) / (1000 * 3600 * 24);
+  const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 3600 * 24));
 
   if (totalDays <= 0) {
     return <div className="text-center text-gray-500 dark:text-slate-400">Invalid date range for Gantt chart.</div>;
   }
 
   const getDaysFromStart = (date) => {
-    return (date.getTime() - minDate.getTime()) / (1000 * 3600 * 24);
+    const normMin = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
+    const normDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return (normDate.getTime() - normMin.getTime()) / (1000 * 3600 * 24);
   };
 
   const colors = ['bg-amber-500', 'bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-purple-500', 'bg-yellow-500'];
   const formatDate = (date) => date.toLocaleDateString();
 
-  return (
-    <div className="relative font-sans text-sm">
-      <div className="print:hidden">
-        <div className="grid gap-y-1">
-          {data.map((task, index) => {
-              const leftPercentage = (getDaysFromStart(task.start) / totalDays) * 100;
-              const widthPercentage = ((task.end.getTime() - task.start.getTime()) / (1000 * 3600 * 24) / totalDays) * 100;
+  const gridLines = [];
+  const dateLabels = [];
+  for (let i = 0; i < totalDays; i++) {
+    const currentDate = new Date(minDate);
+    currentDate.setDate(currentDate.getDate() + i);
+    gridLines.push(
+      <div key={`grid-${i}`} className="flex-shrink-0 w-full border-l border-gray-200 dark:border-slate-700/50" style={{ width: `calc(100% / ${totalDays})` }}></div>
+    );
+     dateLabels.push(
+      <div key={`label-${i}`} className="text-center text-xs text-gray-400 dark:text-slate-500" style={{ width: `calc(100% / ${totalDays})` }}>
+          {currentDate.getDate()}
+      </div>
+    );
+  }
 
-              return (
-                <div key={task.name} className="flex items-center h-4">
-                  <div className="w-40 pr-4 text-right text-gray-700 dark:text-slate-300 truncate">{task.name}</div>
-                  <div className="flex-1 bg-gray-200 dark:bg-slate-700 rounded-sm h-2.5 relative overflow-hidden">
-                    <div
-                      className={`absolute h-full rounded-sm ${colors[index % colors.length]}`}
-                      style={{
-                        left: `${leftPercentage}%`,
-                        width: `${widthPercentage}%`,
-                      }}
-                      title={`${task.name}: ${formatDate(task.start)} to ${formatDate(task.end)}`}
-                    >
-                      {/* Text label removed for compactness */}
+  return (
+    <div className="font-sans text-sm">
+      <div className="print:hidden">
+        <div className="flex">
+          {/* Task Labels Column */}
+          <div className="w-40 pr-4 shrink-0">
+            {data.map(task => (
+              <div key={`label-${task.name}`} className="h-6 flex items-center justify-end text-gray-700 dark:text-slate-300 truncate" title={task.name}>
+                {task.name}
+              </div>
+            ))}
+          </div>
+          {/* Timeline Area */}
+          <div className="flex-1 relative">
+            {/* Grid Background */}
+            <div className="absolute top-0 left-0 w-full h-full flex z-0">
+              {gridLines}
+            </div>
+            {/* Task Bars */}
+            <div className="relative z-10">
+              {data.map((task, index) => {
+                  const startDays = getDaysFromStart(task.start);
+                  const durationDays = getDaysFromStart(task.end) - startDays + 1;
+                  const leftPercentage = (startDays / totalDays) * 100;
+                  const widthPercentage = (durationDays / totalDays) * 100;
+                  return (
+                    <div key={`bar-container-${task.name}`} className="h-6 flex items-center">
+                      <div
+                        className={`h-4 rounded-sm ${colors[index % colors.length]}`}
+                        style={{
+                          marginLeft: `${leftPercentage}%`,
+                          width: `${widthPercentage}%`,
+                        }}
+                        title={`${task.name}: ${formatDate(task.start)} to ${formatDate(task.end)}`}
+                      ></div>
                     </div>
-                  </div>
-                </div>
-              );
-          })}
+                  );
+              })}
+            </div>
+          </div>
         </div>
-        <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-slate-400">
-          <span>{minDate.toLocaleDateString()}</span>
-          <span>{maxDate.toLocaleDateString()}</span>
+        {/* Date Labels Row */}
+        <div className="flex mt-1">
+          <div className="w-40 pr-4 shrink-0"></div>
+          <div className="flex-1 flex">{dateLabels}</div>
+        </div>
+        <div className="flex justify-between mt-1 text-xs text-gray-500 dark:text-slate-400">
+            <span>{minDate.toLocaleDateString()}</span>
+            <span>{maxDate.toLocaleDateString()}</span>
         </div>
       </div>
       <div className="hidden print:block">
@@ -1138,8 +1174,14 @@ const App = () => {
                 return note;
             };
 
+            const durationInDays = Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+            let dayCounter = 1;
             for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                tasksForStep.push({ date: d.toISOString().split('T')[0], day: getDay(d.toISOString().split('T')[0]), task: step.name, notes: d.getTime() === start.getTime() ? firstDayNotes() : `(續)`, ganttGroup: step.type });
+                const note = dayCounter === 1
+                    ? firstDayNotes()
+                    : `(Day ${dayCounter} of ${durationInDays})`;
+                tasksForStep.push({ date: d.toISOString().split('T')[0], day: getDay(d.toISOString().split('T')[0]), task: step.name, notes: note, ganttGroup: step.type });
+                dayCounter++;
             }
         } catch { return []; }
         return tasksForStep;
