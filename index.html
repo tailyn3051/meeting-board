@@ -38,7 +38,7 @@
           .print-container {
             box-shadow: none !important;
             border: none !important;
-            padding: 0 !important;
+            padding: 1cm !important;
             margin: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
@@ -64,6 +64,33 @@
           }
           .print-break-inside-avoid {
             break-inside: avoid;
+          }
+          h1, h2, h3, h4 {
+            color: #000 !important;
+          }
+          h2 {
+            font-size: 16pt;
+            border-color: #ccc !important;
+          }
+          h3 {
+            font-size: 11pt;
+          }
+          p, li, td, th, span {
+            font-size: 9pt;
+          }
+          .card-print-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+          }
+          table {
+            width: 100%;
+          }
+          .print-card {
+            box-shadow: none !important;
+            border: 1px solid #ccc !important;
+            background: #fff !important;
+            padding: 0.5rem !important;
           }
         }
     </style>
@@ -496,9 +523,9 @@ const Tabs = ({ tabs, activeTab, onTabClick }) => {
 
 
 // --- From components/TabContentWrapper.tsx ---
-const TabContentWrapper = ({ title, children, isFirstPrintSection = false }) => {
+const TabContentWrapper = ({ title, children, isFirstPrintSection = false, className = '' }) => {
   return (
-    <div className={`mb-10 last:mb-0 ${isFirstPrintSection ? '' : 'print:break-before-page'}`}>
+    <div className={`mb-10 last:mb-0 ${isFirstPrintSection ? '' : 'print:break-before-page'} ${className}`}>
       <h2 className="text-2xl font-bold text-amber-800 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">{title}</h2>
       {children}
     </div>
@@ -901,7 +928,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
       <p className="text-base text-gray-700 dark:text-slate-300">This is the complete manufacturing and quality control flow for {projectId}. Drag steps to reorder, click the status icon to activate/deactivate, double-click names to edit, or click a step to view details. Use <strong>Ctrl/Cmd + Click</strong> to select multiple steps.</p>
       <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
         <EditableField as="h2" initialValue={title} onSave={onTitleChange} className="text-xl font-semibold mb-12 text-amber-900 dark:text-amber-400 text-center" inputClassName="text-xl font-semibold text-center" />
-        <div className="flex flex-wrap items-center justify-center gap-2 py-4 print:block">
+        <div className="flex flex-wrap items-center justify-center gap-2 py-4 print:hidden">
           {activeSteps.map((step, index) => <ActiveStepNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />)}
            <button onClick={onAddStep} className="ml-2 h-12 w-40 flex items-center justify-center rounded-md border-2 border-dashed border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 font-semibold cursor-pointer transition-all duration-200 ease-in-out hover:bg-green-100 dark:hover:bg-green-500/20 hover:border-green-500 dark:hover:border-green-500 no-print">Add Step +</button>
         </div>
@@ -981,17 +1008,17 @@ const OverviewTab = ({ details, tasks, onDetailChange }) => {
       <p className="text-base text-gray-700 dark:text-slate-300">
         此儀表板整合了 {details.id} NPI 試產的關鍵資訊。您可以在此查看專案的總體概況、關鍵指標以及高階時程。使用上方的頁籤來深入了解特定的規格、製造流程或詳細的任務列表。
       </p>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card title="專案料號">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 card-print-grid">
+        <Card title="專案料號" className="print-card">
           <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-2xl font-semibold text-amber-900 dark:text-amber-400" />
         </Card>
-        <Card title="試產數量">
+        <Card title="試產數量" className="print-card">
           <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-2xl font-semibold text-amber-900 dark:text-amber-400" />
         </Card>
-        <Card title="PCB 尺寸 (mm)">
+        <Card title="PCB 尺寸 (mm)" className="print-card">
           <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-lg font-semibold text-amber-900 dark:text-amber-400" />
         </Card>
-        <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20">
+        <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20 print-card">
           <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-2xl font-semibold text-red-700 dark:text-red-500" />
         </Card>
       </div>
@@ -1240,10 +1267,10 @@ const App = () => {
             </TabContentWrapper>
           </div>
           <div className={activeTab === '規格與流程 (Specs & Process Flow)' ? '' : 'hidden print-show'}>
-            <TabContentWrapper title="流程 (Process Flow)">
+            <TabContentWrapper title="流程 (Process Flow)" className="no-print">
                <ProcessFlowTab steps={processSteps} specs={specs} projectId={projectDetails.id} title={processFlowTitle} onTitleChange={handleProcessFlowTitleChange} onStepChange={handleStepChange} onBulkStepDateChange={handleBulkStepDateChange} onAddStep={handleAddStep} onDeleteStep={handleDeleteStep} onToggleStep={handleToggleStep} onReorderSteps={handleReorderSteps} onLinkStepToSpec={handleLinkStepToSpec} />
             </TabContentWrapper>
-            <TabContentWrapper title="規格 (Specs)">
+            <TabContentWrapper title="規格 (Specs)" className="no-print">
               <SpecsTab specs={specs} onSpecChange={handleSpecChange} onAddSpec={handleAddSpec} onDeleteSpec={handleDeleteSpec} onAddSpecItem={handleAddSpecItem} onDeleteSpecItem={handleDeleteSpecItem} onSpecItemKeyChange={handleSpecItemKeyChange} onReorderSpecs={handleReorderSpecs} />
             </TabContentWrapper>
           </div>
@@ -1254,7 +1281,7 @@ const App = () => {
           </div>
         </main>
         <footer className="text-center text-xs text-gray-400 dark:text-slate-500 mt-8">
-            ver-0.4
+            ver-0.5
         </footer>
       </div>
     </div>
