@@ -1,22 +1,7 @@
-const CACHE_NAME = 'npi-meeting-board-v6'; // Incremented version
+const CACHE_NAME = 'npi-meeting-board-v7'; // Incremented version
 const urlsToCache = [
   './',
   './index.html',
-  './index.tsx',
-  './App.tsx',
-  './types.ts',
-  './components/Card.tsx',
-  './components/GanttChart.tsx',
-  './components/Header.tsx',
-  './components/Tabs.tsx',
-  './components/OverviewTab.tsx',
-  './components/SpecsTab.tsx',
-  './components/ProcessFlowTab.tsx',
-  './components/ScheduleTab.tsx',
-  './components/EditableField.tsx',
-  './components/TabContentWrapper.tsx',
-  './components/Calendar.tsx',
-  './components/AttendeesTab.tsx',
   './manifest.json',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/react@18/umd/react.development.js',
@@ -29,9 +14,13 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Opened cache');
-        return cache.addAll(urlsToCache).catch(err => {
-          console.error('Failed to cache all URLs:', err);
+        // Use individual add calls to see which one fails
+        const promises = urlsToCache.map(url => {
+          return cache.add(url).catch(err => {
+            console.error(`Failed to cache ${url}:`, err);
+          });
         });
+        return Promise.all(promises);
       })
   );
 });
@@ -53,6 +42,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // For navigation requests, try network first, then cache fallback.
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => caches.match('./index.html'))
@@ -60,19 +50,27 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // For other requests (scripts, etc.), use a cache-first strategy.
   event.respondWith(
     caches.match(event.request)
       .then(response => {
+        // Cache hit - return response
         if (response) {
           return response;
         }
 
+        // Not in cache - go to network
         return fetch(event.request).then(
           networkResponse => {
-            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+            // Check if we received a valid response
+            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic' && networkResponse.type !== 'cors') {
               return networkResponse;
             }
             
+            // IMPORTANT: Clone the response. A response is a stream
+            // and because we want the browser to consume the response
+            // as well as the cache consuming the response, we need
+            // to clone it so we have two streams.
             const responseToCache = networkResponse.clone();
 
             caches.open(CACHE_NAME)
