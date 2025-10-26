@@ -1,0 +1,5 @@
+{
+  "name": "NPI Meeting Board ver-0.2 github",
+  "description": "A web application that visualizes the New Product Introduction (NPI) plan from a whiteboard, including project specifications, manufacturing processes, schedules, and a Gantt chart timeline.",
+  "requestFramePermissions": []
+}
