@@ -368,10 +368,6 @@ const App: React.FC = () => {
     setProcessSteps(newSteps);
   };
 
-  const handleTaskChange = () => {
-     // Since the schedule is fully derived, direct editing is disabled to maintain data integrity.
-  };
-  
   const handleProcessFlowTitleChange = (newTitle: string) => {
     setProcessFlowTitle(newTitle);
   };
@@ -483,7 +479,7 @@ const App: React.FC = () => {
                 <OverviewTab details={projectDetails} tasks={ganttTasks} onDetailChange={handleDetailChange} />
             </TabContentWrapper>
             <TabContentWrapper title="時程與任務 (Schedule)">
-                <ScheduleTab tasks={scheduleTasks} onTaskChange={handleTaskChange} />
+                <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
             </TabContentWrapper>
           </div>
 
