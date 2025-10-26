@@ -777,6 +777,10 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
                 : [...prev, stepId]
         );
     } else {
+        // Prevent re-render if this step is already the only one selected
+        if (selectedStepIds.length === 1 && selectedStepIds[0] === stepId) {
+            return;
+        }
         setSelectedStepIds([stepId]);
     }
   };
