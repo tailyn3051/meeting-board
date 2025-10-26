@@ -1179,7 +1179,7 @@ const App = () => {
             for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
                 const note = dayCounter === 1
                     ? firstDayNotes()
-                    : `(Day ${dayCounter} of ${durationInDays})`;
+                    : `${firstDayNotes()} (Day ${dayCounter} of ${durationInDays})`;
                 tasksForStep.push({ date: d.toISOString().split('T')[0], day: getDay(d.toISOString().split('T')[0]), task: step.name, notes: note, ganttGroup: step.type });
                 dayCounter++;
             }
