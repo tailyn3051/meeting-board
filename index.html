@@ -81,8 +81,1139 @@
     <div id="root"></div>
 
     <!-- Main Application Script -->
-    <!-- Note: type="text/babel" and data-type="module" are essential -->
-    <script type="text/babel" data-type="module" src="./index.tsx"></script>
+    <script type="text/babel" data-type="module">
+// --- From types.ts ---
+interface ProjectDetails {
+  id: string;
+  quantity: number;
+  pcbSize: string;
+  targetShipDate: string;
+}
+
+interface SpecDetails {
+  id: string;
+  title: string;
+  items: Record<string, string | number>;
+}
+
+interface ProcessStep {
+  id:string;
+  name:string;
+  details: string;
+  type: 'process' | 'test' | 'qc' | 'pack';
+  isActive: boolean;
+  startDate: string;
+  endDate: string;
+  relatedSpecId?: string | null;
+}
+
+interface ScheduleTask {
+  date: string;
+  day: string;
+  task: string;
+  notes: string;
+  highlight?: string;
+  ganttGroup: string; 
+}
+
+interface GanttTask {
+  name: string;
+  start: Date;
+  end: Date;
+}
+
+
+// --- From components/EditableField.tsx ---
+const EditableField = ({
+  initialValue,
+  onSave,
+  as: Component = 'span',
+  className = '',
+  inputClassName = '',
+  type = 'text',
+}) => {
+  const { useState, useEffect, useRef } = React;
+  const [isEditing, setIsEditing] = useState(false);
+  const [value, setValue] = useState(String(initialValue));
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    setValue(String(initialValue));
+  }, [initialValue]);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      if (inputRef.current instanceof HTMLInputElement) {
+        inputRef.current.select();
+      }
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    if (String(initialValue) !== value) {
+      onSave(value);
+    }
+    setIsEditing(false);
+  };
+  
+  const isTextarea = Component === 'div' || (typeof initialValue === 'string' && initialValue.includes('\n'));
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !isTextarea && type !== 'datetime-local') {
+        e.preventDefault();
+        handleSave();
+    } else if (e.key === 'Escape') {
+      setValue(String(initialValue));
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    const commonProps = {
+        value: value,
+        onChange: (e) => setValue(e.target.value),
+        onBlur: handleSave,
+        onKeyDown: handleKeyDown,
+        className: `w-full h-full bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-amber-500 dark:focus:ring-amber-600 rounded-md ${inputClassName}`
+    };
+
+    if (isTextarea) {
+      return (
+        <textarea
+          ref={inputRef}
+          {...commonProps}
+          rows={Math.max(3, String(value).split('\n').length + 1)}
+        />
+      );
+    }
+
+    return (
+      <input
+        ref={inputRef}
+        type={type}
+        {...commonProps}
+      />
+    );
+  }
+  
+  const displayValue = (type === 'datetime-local' && typeof value === 'string' && value)
+    ? value.replace('T', ' ')
+    : value;
+
+  return (
+    <Component
+      onDoubleClick={() => setIsEditing(true)}
+      className={`${className} transition-colors cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-500/10 rounded-md p-1 -m-1`}
+      title="Double-click to edit"
+      style={ isTextarea ? { whiteSpace: 'pre-wrap', minHeight: '1.5em' } : {}}
+    >
+      {displayValue || <span className="text-gray-400 dark:text-slate-500">(empty)</span>}
+    </Component>
+  );
+};
+
+
+// --- From components/Card.tsx ---
+const Card = ({ title, children, className = '' }) => {
+  return (
+    <div className={`bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-600 print:break-inside-avoid ${className}`}>
+      <h3 className="text-sm font-medium text-gray-500 dark:text-slate-400">{title}</h3>
+      {children}
+    </div>
+  );
+};
+
+
+// --- From components/GanttChart.tsx ---
+const GanttChart = ({ data }) => {
+  if (!data || data.length === 0) {
+    return <div className="text-center text-gray-500 dark:text-slate-400">No task data available for the Gantt chart.</div>;
+  }
+
+  const minDate = new Date(Math.min(...data.map(task => task.start.getTime())));
+  const maxDate = new Date(Math.max(...data.map(task => task.end.getTime())));
+  
+  minDate.setDate(minDate.getDate() - 2);
+  maxDate.setDate(maxDate.getDate() + 2);
+
+  const totalDays = (maxDate.getTime() - minDate.getTime()) / (1000 * 3600 * 24);
+
+  if (totalDays <= 0) {
+    return <div className="text-center text-gray-500 dark:text-slate-400">Invalid date range for Gantt chart.</div>;
+  }
+
+  const getDaysFromStart = (date) => {
+    return (date.getTime() - minDate.getTime()) / (1000 * 3600 * 24);
+  };
+
+  const colors = ['bg-amber-500', 'bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-purple-500', 'bg-yellow-500'];
+  const formatDate = (date) => date.toLocaleDateString();
+
+  return (
+    <div className="relative font-sans text-sm">
+      <div className="print:hidden">
+        <div className="grid gap-y-2">
+          {data.map((task, index) => {
+              const leftPercentage = (getDaysFromStart(task.start) / totalDays) * 100;
+              const widthPercentage = ((task.end.getTime() - task.start.getTime()) / (1000 * 3600 * 24) / totalDays) * 100;
+
+              return (
+                <div key={task.name} className="flex items-center h-10">
+                  <div className="w-40 pr-4 text-right text-gray-700 dark:text-slate-300 truncate">{task.name}</div>
+                  <div className="flex-1 bg-gray-200 dark:bg-slate-700 rounded-lg h-6 relative overflow-hidden">
+                    <div
+                      className={`absolute h-full rounded-lg ${colors[index % colors.length]}`}
+                      style={{
+                        left: `${leftPercentage}%`,
+                        width: `${widthPercentage}%`,
+                      }}
+                    >
+                      <span className="absolute inset-0 flex items-center justify-center text-white text-xs font-semibold px-2 truncate">
+                        {task.name}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+          })}
+        </div>
+        <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-slate-400">
+          <span>{minDate.toLocaleDateString()}</span>
+          <span>{maxDate.toLocaleDateString()}</span>
+        </div>
+      </div>
+      <div className="hidden print:block">
+        <h4 className="font-bold mb-2">Task Summary:</h4>
+        <ul className="list-disc list-inside">
+          {data.map((task, index) => (
+            <li key={`print-${index}`}>
+              <strong>{task.name}:</strong> {formatDate(task.start)} to {formatDate(task.end)}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+
+// --- From components/Calendar.tsx ---
+const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true }) => {
+  const { useState } = React;
+  const [currentDate, setCurrentDate] = useState(selectedDate || new Date());
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const monthName = currentDate.toLocaleString('default', { month: 'long' });
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+
+  const isToday = (day) => 
+    today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
+
+  const isEventDay = (day) => {
+    if (!showEvents) return false;
+    const checkDate = new Date(year, month, day);
+    checkDate.setHours(0, 0, 0, 0);
+
+    return events.some(event => {
+      if (!event.startDate || !event.endDate) return false;
+      try {
+        const startDate = new Date(event.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(event.endDate);
+        endDate.setHours(0, 0, 0, 0);
+        return checkDate >= startDate && checkDate <= endDate;
+      } catch {
+        return false;
+      }
+    });
+  };
+
+  const isSelectedDay = (day) => {
+    if (!selectedDate) return false;
+    return selectedDate.getDate() === day &&
+           selectedDate.getMonth() === month &&
+           selectedDate.getFullYear() === year;
+  }
+
+  const days = [];
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    days.push(<div key={`empty-${i}`} className="p-2"></div>);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const isEvent = isEventDay(day);
+    const isCurrent = isToday(day);
+    const isSelected = isSelectedDay(day);
+
+    let dayClass = 'p-2 flex items-center justify-center h-10 w-10 rounded-full cursor-pointer transition-colors duration-200';
+    if (isEvent) {
+      dayClass += ' bg-amber-500 text-white font-bold';
+    } else if (isCurrent) {
+      dayClass += ' bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-300 font-bold';
+    } else {
+      dayClass += ' text-gray-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-700';
+    }
+    if (isSelected) {
+      dayClass += ' ring-2 ring-blue-500 ring-offset-1';
+    }
+
+    days.push(
+      <button
+        key={day}
+        onClick={() => onDateClick(new Date(year, month, day))}
+        className={dayClass}
+      >
+        {day}
+      </button>
+    );
+  }
+
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors">&larr;</button>
+        <div className="font-bold text-lg text-amber-800 dark:text-amber-400">{`${monthName} ${year}`}</div>
+        <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors">&rarr;</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-sm font-medium text-gray-500 dark:text-slate-400">
+        {weekdays.map(day => <div key={day} className="py-2">{day}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1 mt-2 text-center">
+        {days}
+      </div>
+    </div>
+  );
+};
+
+
+// --- From components/Header.tsx ---
+const Header = ({ projectName, onProjectNameChange, onSaveAsPdf, appTitle, onAppTitleChange }) => {
+    return (
+        <header className="mb-6">
+            <div className="flex justify-between items-start">
+                <div>
+                    <EditableField
+                        as="h1"
+                        initialValue={appTitle}
+                        onSave={onAppTitleChange}
+                        className="text-3xl md:text-4xl font-bold text-amber-900 dark:text-amber-400"
+                        inputClassName="text-3xl md:text-4xl font-bold"
+                    />
+                    <div className="text-xl text-gray-700 dark:text-slate-300 mt-1 flex items-center">
+                        <span className="whitespace-nowrap">專案：</span>
+                        <EditableField 
+                            as="span"
+                            initialValue={projectName}
+                            onSave={onProjectNameChange}
+                            className="font-semibold ml-1"
+                            inputClassName="text-xl"
+                        />
+                    </div>
+                </div>
+                <button
+                    onClick={onSaveAsPdf}
+                    className="no-print group ml-4 mt-1 p-2.5 rounded-xl border border-gray-300/80 dark:border-slate-600 bg-gray-200/60 dark:bg-slate-700 shadow-sm hover:bg-gray-200 dark:hover:bg-slate-600 active:shadow-inner transition-all duration-200"
+                    title="Save as PDF"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600 dark:text-slate-300 transition-colors group-hover:text-gray-800 dark:group-hover:text-slate-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+    );
+};
+
+
+// --- From components/Tabs.tsx ---
+const Tabs = ({ tabs, activeTab, onTabClick }) => {
+  return (
+    <nav className="flex border-b border-amber-200 dark:border-slate-700 mb-6 space-x-4 md:space-x-8 no-print">
+      {tabs.map(tab => (
+        <button
+          key={tab}
+          onClick={() => onTabClick(tab)}
+          className={`py-3 px-1 md:px-4 text-gray-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-400 focus:outline-none transition-colors duration-200 ${
+            activeTab === tab ? 'border-b-2 border-amber-700 dark:border-amber-500 text-amber-700 dark:text-amber-500 font-semibold' : ''
+          }`}
+        >
+          {tab}
+        </button>
+      ))}
+    </nav>
+  );
+};
+
+
+// --- From components/TabContentWrapper.tsx ---
+const TabContentWrapper = ({ title, children, isFirstPrintSection = false }) => {
+  return (
+    <div className={`mb-10 last:mb-0 ${isFirstPrintSection ? '' : 'print:break-before-page'}`}>
+      <h2 className="text-2xl font-bold text-amber-800 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">{title}</h2>
+      {children}
+    </div>
+  );
+};
+
+
+// --- From components/AttendeesTab.tsx ---
+const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
+  return (
+    <section className="space-y-6">
+      <p className="text-base text-gray-700 dark:text-slate-300">
+        請在此處列出本次會議的與會人員，每行一位。
+      </p>
+      <div className="bg-white dark:bg-slate-800/50 p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
+        <div className="flex justify-start items-center gap-x-8 mb-4">
+            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400">與會人員 (Attendees)</h3>
+            <div className="flex items-center">
+                <span className="text-gray-600 dark:text-slate-400 mr-2 whitespace-nowrap">會議日期:</span>
+                <EditableField
+                    type="date"
+                    initialValue={date}
+                    onSave={onDateChange}
+                    className="font-semibold text-amber-900 dark:text-amber-400"
+                />
+            </div>
+        </div>
+        <EditableField
+          as="div"
+          initialValue={attendees.join('\n')}
+          onSave={onAttendeesChange}
+          className="mt-1 p-2 border rounded-md w-full bg-amber-50 dark:bg-slate-700/50 min-h-[200px]"
+          inputClassName="p-2"
+        />
+      </div>
+    </section>
+  );
+};
+
+
+// --- From components/ScheduleTab.tsx ---
+const ScheduleTab = ({ tasks, onTaskChange }) => {
+  return (
+    <section>
+      <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
+        此為詳細的 NPI 試產任務時程表，包含所有關鍵日期、任務、QC 檢查點與最終交付物。
+      </p>
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 overflow-hidden print:break-inside-avoid">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full min-w-[600px] print:min-w-full text-left">
+            <thead className="bg-amber-100 dark:bg-slate-700/50 border-b border-amber-200 dark:border-slate-600">
+              <tr>
+                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400">日期</th>
+                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400">星期</th>
+                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400">任務 / 事件</th>
+                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400">備註</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-amber-100 dark:divide-slate-700">
+              {tasks.map((task, index) => {
+                const showDate = index === 0 || tasks[index - 1].date !== task.date;
+                return (
+                  <tr key={index} className="hover:bg-amber-50/70 dark:hover:bg-slate-700/50">
+                    <td className="p-4 align-top">
+                      {showDate && (
+                        <EditableField 
+                          as="div" 
+                          initialValue={task.date} 
+                          onSave={(v) => onTaskChange(index, 'date', v)} 
+                          className="font-semibold text-gray-900 dark:text-slate-200"
+                        />
+                      )}
+                    </td>
+                    <td className="p-4 align-top">
+                      {showDate && (
+                        <EditableField 
+                          as="div" 
+                          initialValue={task.day} 
+                          onSave={(v) => onTaskChange(index, 'day', v)}
+                          className="text-gray-900 dark:text-slate-200"
+                        />
+                      )}
+                    </td>
+                    <td className={`p-4 align-top font-medium ${task.highlight || 'text-gray-800 dark:text-slate-300'}`}>
+                      <EditableField as="div" initialValue={task.task} onSave={(v) => onTaskChange(index, 'task', v)} />
+                    </td>
+                    <td className={`p-4 align-top ${task.highlight?.includes('red') ? 'font-bold text-red-700 dark:text-red-500' : 'text-gray-800 dark:text-slate-300'}`}>
+                      <EditableField as="div" initialValue={task.notes} onSave={(v) => onTaskChange(index, 'notes', v)} />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+
+// --- From components/SpecsTab.tsx ---
+const SpecsTab = ({ specs, onSpecChange, onAddSpec, onDeleteSpec, onAddSpecItem, onDeleteSpecItem, onSpecItemKeyChange, onReorderSpecs }) => {
+  const { useState } = React;
+  const [draggedSpecId, setDraggedSpecId] = useState(null);
+
+  const handleDragStart = (e, id) => {
+    setDraggedSpecId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.style.opacity = '0.5';
+    e.currentTarget.classList.add('shadow-2xl', 'border-amber-400', 'dark:border-amber-500');
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedSpecId || draggedSpecId === targetId) return;
+
+    const draggedIndex = specs.findIndex(s => s.id === draggedSpecId);
+    const targetIndex = specs.findIndex(s => s.id === targetId);
+    
+    const newSpecs = [...specs];
+    const [draggedItem] = newSpecs.splice(draggedIndex, 1);
+    newSpecs.splice(targetIndex, 0, draggedItem);
+    
+    onReorderSpecs(newSpecs);
+    setDraggedSpecId(null);
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+    e.currentTarget.classList.remove('shadow-2xl', 'border-amber-400', 'dark:border-amber-500');
+    setDraggedSpecId(null);
+  };
+
+  return (
+    <section className="space-y-6">
+      <p className="text-base text-gray-700 dark:text-slate-300">
+        此處詳列了本次試產的關鍵技術規格與製程參數。這些是確保品質與一致性的重要依據。
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {specs.map((spec) => (
+          <div 
+            key={spec.id} 
+            draggable
+            onDragStart={(e) => handleDragStart(e, spec.id)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, spec.id)}
+            onDragEnd={handleDragEnd}
+            className="group/card relative bg-white dark:bg-slate-800/50 p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col print:break-inside-avoid cursor-move transition-all duration-200"
+          >
+            <button
+              onClick={() => onDeleteSpec(spec.id)}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold opacity-0 group-hover/card:opacity-100 transition-opacity z-10 no-print"
+              title="Delete Spec"
+            >
+              &times;
+            </button>
+            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-3">
+              <EditableField
+                  as="span"
+                  initialValue={spec.title}
+                  onSave={(newValue) => onSpecChange(spec.id, 'title', newValue)}
+                  className="w-full"
+              />
+            </h3>
+            <div className="flex-grow">
+              <ul className="list-disc list-outside ml-5 space-y-2 text-gray-800 dark:text-slate-300">
+                {Object.entries(spec.items).map(([key, value]) => (
+                  <li key={key} className="group/item flex items-center">
+                    <EditableField
+                      as="span"
+                      initialValue={key}
+                      onSave={(newKey) => onSpecItemKeyChange(spec.id, key, newKey)}
+                      className="font-medium mr-1"
+                    />:
+                    <EditableField
+                      as="span"
+                      initialValue={value}
+                      onSave={(newValue) => onSpecChange(spec.id, key, newValue)}
+                      className="flex-grow ml-2"
+                    />
+                     <button
+                        onClick={() => onDeleteSpecItem(spec.id, key)}
+                        className="ml-2 text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity text-lg no-print"
+                        title="Delete parameter"
+                      >
+                        &times;
+                      </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="mt-4 no-print">
+               <button
+                  onClick={() => onAddSpecItem(spec.id)}
+                  className="text-sm font-medium p-1 rounded-md cursor-pointer transition-colors duration-200 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/10"
+                >
+                  + Add Parameter
+                </button>
+            </div>
+          </div>
+        ))}
+      </div>
+       <div className="text-center mt-8 no-print">
+        <button
+            onClick={onAddSpec}
+            className="font-medium p-3 rounded-lg shadow-sm cursor-pointer transition-all duration-200 ease-in-out bg-green-200 text-green-900 dark:bg-green-500/20 dark:text-green-300 dark:hover:bg-green-500/30 hover:transform hover:-translate-y-0.5 hover:shadow-lg"
+          >
+            Add New Spec +
+          </button>
+      </div>
+    </section>
+  );
+};
+
+
+// --- From components/ProcessFlowTab.tsx ---
+const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepChange, onBulkStepDateChange, onAddStep, onDeleteStep, onToggleStep, onReorderSteps, onLinkStepToSpec }) => {
+  const { useState, useMemo, useEffect } = React;
+  const [selectedStepIds, setSelectedStepIds] = useState(() => {
+    const firstActive = steps.find(s => s.isActive);
+    return firstActive ? [firstActive.id] : [];
+  });
+  const [draggedItemId, setDraggedItemId] = useState(null);
+  const [editingDateField, setEditingDateField] = useState('startDate');
+  const [isLinkingSpec, setIsLinkingSpec] = useState(false);
+
+  useEffect(() => {
+    const currentlyActiveSelection = selectedStepIds.filter(id => 
+        steps.find(step => step.id === id)?.isActive
+    );
+    if (currentlyActiveSelection.length !== selectedStepIds.length) {
+        setSelectedStepIds(currentlyActiveSelection);
+    }
+  }, [steps, selectedStepIds]);
+
+  useEffect(() => {
+    setEditingDateField('startDate');
+    setIsLinkingSpec(false);
+  }, [selectedStepIds.join(',')]);
+
+  const activeSteps = useMemo(() => steps.filter(s => s.isActive), [steps]);
+  const inactiveSteps = useMemo(() => steps.filter(s => !s.isActive), [steps]);
+
+  const handleDragStart = (e, id) => {
+    setDraggedItemId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.style.opacity = '0.5';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault(); 
+  };
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedItemId || draggedItemId === targetId) return;
+
+    const reorderedActiveSteps = [...activeSteps];
+    const draggedIndex = reorderedActiveSteps.findIndex(s => s.id === draggedItemId);
+    const targetIndex = reorderedActiveSteps.findIndex(s => s.id === targetId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    const [draggedItem] = reorderedActiveSteps.splice(draggedIndex, 1);
+    reorderedActiveSteps.splice(targetIndex, 0, draggedItem);
+    
+    onReorderSteps([...reorderedActiveSteps, ...inactiveSteps]);
+    setDraggedItemId(null);
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+    setDraggedItemId(null);
+  };
+  
+  const handleStepSelect = (stepId, isMultiSelect) => {
+    if (isMultiSelect) {
+        setSelectedStepIds(prev => 
+            prev.includes(stepId) 
+                ? prev.filter(id => id !== stepId)
+                : [...prev, stepId]
+        );
+    } else {
+        setSelectedStepIds([stepId]);
+    }
+  };
+
+  const selectedStep = useMemo(() => {
+    if (selectedStepIds.length === 1) {
+        return steps.find(s => s.id === selectedStepIds[0]);
+    }
+    return null;
+  }, [selectedStepIds, steps]);
+
+  const relatedSpec = useMemo(() => {
+    if (!selectedStep || !selectedStep.relatedSpecId) return null;
+    return specs.find(spec => spec.id === selectedStep.relatedSpecId);
+  }, [selectedStep, specs]);
+  
+  const handleDateSelect = (date) => {
+    if (selectedStepIds.length > 0 && editingDateField) {
+        if (editingDateField === 'startDate') {
+            date.setHours(9, 0, 0, 0);
+        } else {
+            date.setHours(17, 0, 0, 0);
+        }
+        
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
+
+        onBulkStepDateChange(selectedStepIds, editingDateField, formattedDate);
+    }
+  };
+  
+  const selectedDateForCalendar = useMemo(() => {
+    if (selectedStepIds.length !== 1) return null;
+    const step = steps.find(s => s.id === selectedStepIds[0]);
+    if (!step) return null;
+    const dateString = editingDateField === 'startDate' ? step.startDate : step.endDate;
+    if (dateString) {
+        try { return new Date(dateString); } catch { return null; }
+    }
+    return null;
+  }, [selectedStepIds, steps, editingDateField]);
+  
+  const getCommonDateValue = (field) => {
+      if (selectedStepIds.length === 0) return '';
+      const firstStep = steps.find(s => s.id === selectedStepIds[0]);
+      if (!firstStep) return '';
+      const firstDate = firstStep[field];
+      const allSame = selectedStepIds.every(id => {
+          const step = steps.find(s => s.id === id);
+          return step && step[field] === firstDate;
+      });
+      return allSame ? firstDate : '';
+  };
+
+  const ActiveStepNode = ({ step, index, totalActiveSteps }) => {
+    const isSelected = selectedStepIds.includes(step.id);
+    const isFirst = index === 0;
+    const isLast = index === totalActiveSteps - 1;
+
+    let bgColor = 'bg-teal-500 hover:bg-teal-600';
+    if (isFirst) bgColor = 'bg-sky-500 hover:bg-sky-600';
+    if (isLast) bgColor = 'bg-emerald-500 hover:bg-emerald-600';
+
+    let clipPathStyle = {};
+    if (totalActiveSteps > 1) {
+        if (isFirst) clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%)' };
+        else if (isLast) clipPathStyle = { clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 1.25rem 50%)' };
+        else clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%, 1.25rem 50%)' };
+    }
+
+    return (
+      <div
+        draggable
+        onDragStart={(e) => handleDragStart(e, step.id)}
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, step.id)}
+        onDragEnd={handleDragEnd}
+        onClick={(e) => handleStepSelect(step.id, e.ctrlKey || e.metaKey)}
+        className={`group/step relative flex items-center justify-start h-12 text-white font-semibold transition-all duration-200 cursor-move ${bgColor}`}
+        style={{ ...clipPathStyle, filter: isSelected ? 'drop-shadow(0 0 8px #f59e0b)' : 'none', paddingLeft: isFirst || totalActiveSteps === 1 ? '1rem' : '2.25rem', paddingRight: isLast || totalActiveSteps === 1 ? '1rem' : '2.25rem' }}
+      >
+        <div className="relative z-10 flex items-center gap-2">
+            <button
+                onClick={(e) => { e.stopPropagation(); onToggleStep(step.id); }}
+                className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 transition-colors no-print"
+                title="Mark as Skipped"
+            >
+                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            </button>
+            <EditableField as="span" initialValue={step.name} onSave={(v) => onStepChange(step.id, 'name', v)} className="text-center whitespace-nowrap" inputClassName="text-black dark:text-white font-semibold text-sm" />
+        </div>
+        <button
+            onClick={(e) => { e.stopPropagation(); onDeleteStep(step.id); }}
+            className="absolute top-[-8px] right-[8px] bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs opacity-0 group-hover/step:opacity-100 hover:bg-red-600 transition-all z-20 no-print"
+            title="Delete Step"
+        >&times;</button>
+      </div>
+    );
+  };
+
+  const SkippedStepNode = ({ step }) => (
+    <button onClick={() => onToggleStep(step.id)} className="flex items-center justify-center gap-2 h-12 w-40 rounded-md border-2 border-dashed border-gray-300 dark:border-slate-600 text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 hover:border-gray-400 dark:hover:border-slate-500 transition-colors no-print" title="Re-activate Step">
+      <div className="h-5 w-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-300 dark:bg-slate-600 text-gray-600 dark:text-slate-300 text-sm font-bold">+</div>
+      <span className="truncate">{step.name}</span>
+    </button>
+  );
+
+  return (
+    <section className="space-y-6">
+      <p className="text-base text-gray-700 dark:text-slate-300">This is the complete manufacturing and quality control flow for {projectId}. Drag steps to reorder, click the status icon to activate/deactivate, double-click names to edit, or click a step to view details. Use <strong>Ctrl/Cmd + Click</strong> to select multiple steps.</p>
+      <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
+        <EditableField as="h2" initialValue={title} onSave={onTitleChange} className="text-xl font-semibold mb-12 text-amber-900 dark:text-amber-400 text-center" inputClassName="text-xl font-semibold text-center" />
+        <div className="flex flex-wrap items-center justify-center gap-2 py-4 print:block">
+          {activeSteps.map((step, index) => <ActiveStepNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />)}
+           <button onClick={onAddStep} className="ml-2 h-12 w-40 flex items-center justify-center rounded-md border-2 border-dashed border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 font-semibold cursor-pointer transition-all duration-200 ease-in-out hover:bg-green-100 dark:hover:bg-green-500/20 hover:border-green-500 dark:hover:border-green-500 no-print">Add Step +</button>
+        </div>
+        {inactiveSteps.length > 0 && (
+          <div className="mt-16 pt-8 border-t border-dashed border-amber-300 dark:border-slate-700 no-print">
+            <h3 className="text-lg font-semibold text-gray-600 dark:text-slate-400 mb-6 text-center">Skipped Steps</h3>
+            <div className="flex flex-wrap items-center justify-center gap-8">{inactiveSteps.map(step => <SkippedStepNode key={step.id} step={step} />)}</div>
+          </div>
+        )}
+        <div className="mt-12 mb-6 border-t border-amber-200 dark:border-slate-700 pt-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2">
+                    {selectedStepIds.length > 1 && <div className="mb-6 p-3 text-center bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg text-amber-900 dark:text-amber-300 font-semibold">{selectedStepIds.length} steps selected. You can now bulk edit their dates below.</div>}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">步驟詳情 (Details):</h3>
+                            <div className="mt-2 p-1 bg-amber-50 dark:bg-slate-700 rounded-lg min-h-[120px] text-gray-800 dark:text-slate-300 border border-amber-200 dark:border-slate-600 transition-all duration-300">
+                                {selectedStep ? <EditableField as="div" initialValue={selectedStep.details} onSave={(newValue) => onStepChange(selectedStep.id, 'details', newValue)} className="p-3 w-full h-full" inputClassName="p-3" /> : <div className="p-3 text-gray-500 dark:text-slate-500 flex items-center justify-center h-full no-print">{selectedStepIds.length > 1 ? "Details for single steps shown here." : "Select an active step above to view or edit its details."}</div>}
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">相關規格 (Related Specs):</h3>
+                            {isLinkingSpec && selectedStep ? (
+                                <div className="bg-white dark:bg-slate-600 p-4 rounded-lg shadow-inner border border-blue-400 h-full mt-2 no-print">
+                                    <select value={selectedStep.relatedSpecId || ''} onChange={(e) => { onLinkStepToSpec(selectedStep.id, e.target.value || null); setIsLinkingSpec(false); }} onBlur={() => setIsLinkingSpec(false)} autoFocus className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-600">
+                                        <option value="" className="text-gray-500">-- No Related Spec --</option>
+                                        {specs.map(spec => <option key={spec.id} value={spec.id} className="text-black bg-white dark:text-white dark:bg-slate-600">{spec.title}</option>)}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div onDoubleClick={() => { if (selectedStep) setIsLinkingSpec(true); }} title={selectedStep ? "Double-click to change related spec" : ""} className={`h-full mt-2 ${selectedStep ? 'cursor-pointer' : ''} print:cursor-default`}>
+                                    {relatedSpec ? (
+                                        <div className="bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-inner border border-amber-200 dark:border-slate-700 h-full">
+                                            <h4 className="text-md font-semibold text-amber-800 dark:text-amber-400 mb-2">{relatedSpec.title}</h4>
+                                            <ul className="list-disc list-outside ml-5 space-y-1 text-sm text-gray-700 dark:text-slate-300">{Object.entries(relatedSpec.items).map(([key, value]) => <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>)}</ul>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center bg-gray-50 dark:bg-slate-700/50 rounded-lg h-full min-h-[150px] border border-dashed border-gray-300 dark:border-slate-600/50">
+                                            <p className="text-gray-500 dark:text-slate-500 text-center p-4">{selectedStepIds.length > 1 ? "Specs for single steps shown here." : selectedStep ? "No related specs for this step." : "Select a step to see specs."}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {selectedStepIds.length > 0 && (
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 border-t border-amber-200 dark:border-slate-700 pt-6 no-print">
+                            <div onClick={() => setEditingDateField('startDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'startDate' ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
+                                <h4 className="text-sm font-semibold text-gray-600 dark:text-slate-400 mb-1">Start Date/Time</h4>
+                                <EditableField type="datetime-local" initialValue={getCommonDateValue('startDate')} onSave={(v) => onBulkStepDateChange(selectedStepIds, 'startDate', v)} className="p-2 border dark:border-slate-600 rounded-md w-full" inputClassName="p-2" />
+                            </div>
+                            <div onClick={() => setEditingDateField('endDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'endDate' ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
+                                <h4 className="text-sm font-semibold text-gray-600 dark:text-slate-400 mb-1">End Date/Time</h4>
+                                <EditableField type="datetime-local" initialValue={getCommonDateValue('endDate')} onSave={(v) => onBulkStepDateChange(selectedStepIds, 'endDate', v)} className="p-2 border dark:border-slate-600 rounded-md w-full" inputClassName="p-2" />
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="lg:col-span-1 no-print">
+                    <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">專案日曆 (Project Calendar):</h3>
+                    <div className="bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-inner border border-amber-200 dark:border-slate-700 mt-2">
+                        <Calendar events={steps} onDateClick={handleDateSelect} selectedDate={selectedDateForCalendar} />
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+
+// --- From components/OverviewTab.tsx ---
+const OverviewTab = ({ details, tasks, onDetailChange }) => {
+  return (
+    <section className="space-y-6">
+      <p className="text-base text-gray-700 dark:text-slate-300">
+        此儀表板整合了 {details.id} NPI 試產的關鍵資訊。您可以在此查看專案的總體概況、關鍵指標以及高階時程。使用上方的頁籤來深入了解特定的規格、製造流程或詳細的任務列表。
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card title="專案料號">
+          <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-2xl font-semibold text-amber-900 dark:text-amber-400" />
+        </Card>
+        <Card title="試產數量">
+          <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-2xl font-semibold text-amber-900 dark:text-amber-400" />
+        </Card>
+        <Card title="PCB 尺寸 (mm)">
+          <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-lg font-semibold text-amber-900 dark:text-amber-400" />
+        </Card>
+        <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20">
+          <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-2xl font-semibold text-red-700 dark:text-red-500" />
+        </Card>
+      </div>
+      <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
+        <h2 className="text-xl font-semibold mb-4 text-amber-900 dark:text-amber-400">專案階段時程</h2>
+        <p className="text-sm text-gray-600 dark:text-slate-400 mb-4">
+          此甘特圖顯示了 NPI 試產的主要階段與預計時程，並會根據“時程與任務”頁籤中的日期自動更新。
+        </p>
+        <GanttChart data={tasks} />
+      </div>
+    </section>
+  );
+};
+
+
+// --- From App.tsx ---
+const App = () => {
+  const { useState, useMemo, useEffect } = React;
+  const LOCAL_STORAGE_KEY = 'npi-meeting-board-state';
+
+  const initialProjectDetails = { id: 'Enter Project ID', quantity: 0, pcbSize: '0 x 0 x 0 mm', targetShipDate: '' };
+  const initialSpecs = [
+    { id: 'spec-smt', title: 'SMT Spec', items: { 'Total units': 'Enter details here', 'Top side': 'Enter details here', 'Bottom side': 'Enter details here' } },
+    { id: 'spec-dip-manual', title: 'DIP Spec (manual)', items: { 'Relay pin': 'Enter details here', '手焊零件': 'New Value', '插件': 'New Value' } },
+    { id: 'spec-test', title: 'Test Spec', items: { 'Test time': 'Enter details here' } },
+    { id: 'spec-pcb', title: 'PCB Spec', items: { 'Layer Count': 'Enter value', 'Material': 'e.g., FR-4', 'Thickness': 'e.g., 1.6mm', 'Surface Finish': 'e.g., ENIG' } },
+    { id: 'spec-firmware', title: 'Firmware Spec', items: { 'Version': 'Enter version number', 'Flashing Method': 'e.g., JTAG, SWD' } },
+    { id: 'spec-mechanical', title: 'Mechanical Spec', items: { 'Enclosure Dimensions': 'L x W x H mm', 'Material': 'e.g., ABS, Aluminum', 'Finish': 'e.g., Matte, Anodized' } },
+    { id: 'spec-packaging', title: 'Packaging Spec', items: { 'Box Type': 'e.g., Corrugated', 'Labeling Standard': 'Enter details', 'Units per Box': 'Enter number' } },
+    { id: 'spec-quality', title: 'Quality & Inspection Spec', items: { 'AQL Level': 'e.g., 0.65', 'Cosmetic Standard': 'Reference document' } },
+    { id: 'spec-tooling', title: 'Tooling & Fixture Spec', items: { 'Test Fixture ID': 'Enter ID', 'Assembly Jig': 'Enter details', 'Stencil Thickness': 'e.g., 0.12mm' } },
+    { id: 'spec-regulatory', title: 'Regulatory Compliance', items: { 'RoHS': 'Compliant / Non-compliant', 'FCC / CE': 'Required / Not Required' } },
+    { id: 'spec-assembly', title: 'Assembly Spec', items: { 'torque': 'New Value', 'Assembly Jig': 'New Value' } },
+    { id: 'spec-dip-general', title: 'DIP Spec', items: { 'Total units': 'New Value', 'Top side': 'New Value', 'Bottom side': 'New Value' } },
+    { id: 'spec-aoi-inspection', title: 'AOI Inspection Spec', items: { 'Inspection Coverage': 'SMT components' } },
+    { id: 'spec-aoi-photo', title: 'AOI Photo Spec', items: { 'Resolution': 'e.g., 10 megapixels', 'Lighting': 'e.g., Coaxial, Side', 'File Format': 'e.g., JPEG, PNG' } },
+    { id: 'spec-wash', title: 'Wash Spec', items: { 'Cycle': 'New Value', 'Temperature': 'New Value', 'Time': 'New Value' } }
+  ];
+  const initialProcessSteps = [
+    { id: 'step-1', name: '建BOM', details: 'Bill of Materials creation and finalization.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-2', name: '料到', details: 'Receiving and incoming inspection of all components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-3', name: 'PCB到', details: 'Receiving and incoming inspection of bare PCBs.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-pcb' },
+    { id: 'step-4', name: 'SMT', details: 'Surface Mount Technology assembly process.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-smt' },
+    { id: 'step-6', name: 'PF', details: 'Press-fit component assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-general' },
+    { id: 'step-7', name: '手焊', details: 'Manual soldering of specific components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
+    { id: 'step-9', name: '插件', details: 'manually Insertion', type: 'process', isActive:true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
+    { id: 'step-8', name: '水洗', details: 'Washing, Cleaning PCBA to remove flux and contaminants.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-wash' },
+    { id: 'step-5', name: 'SMT 目檢', details: 'Visual inspection of SMT components and solder joints.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-aoi-inspection' },
+    { id: 'step-10', name: 'FPT', details: 'Fly Probe testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
+    { id: 'step-11', name: 'QC', details: 'Final quality control checks.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
+    { id: 'step-12', name: 'AOI 拍照', details: 'Automated Optical Inspection and photography for documentation.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-aoi-photo' },
+    { id: 'step-13', name: 'Pack', details: 'Prepare and package the final product for shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-packaging' },
+    { id: 'step-14', name: '出貨 (Shipping)', details: 'Final product shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-aoi-inspect', name: 'AOI Inspection', details: 'Automated Optical Inspection of SMT assembly.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-aoi-inspection' },
+    { id: 'step-15', name: 'DIP', details: 'Through-hole component insertion.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
+    { id: 'step-16', name: 'Function Test', details: 'Comprehensive functional testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
+  ];
+  const initialAttendees = [];
+  const initialAppTitle = '試產會議';
+  const initialProcessFlowTitle = 'Manufacturing Process Flow';
+  const initialMeetingDate = new Date().toISOString().split('T')[0];
+
+  const loadState = () => {
+      try {
+          const serializedState = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (serializedState === null) return undefined;
+          return JSON.parse(serializedState);
+      } catch (err) { console.error("Could not load state", err); return undefined; }
+  };
+  const saveState = (state) => {
+      try {
+          const serializedState = JSON.stringify(state);
+          localStorage.setItem(LOCAL_STORAGE_KEY, serializedState);
+      } catch (err) { console.error("Could not save state", err); }
+  };
+
+  const savedState = loadState();
+  const [appTitle, setAppTitle] = useState(savedState?.appTitle || initialAppTitle);
+  const [activeTab, setActiveTab] = useState('總覽與時程 (Overview & Schedule)');
+  const [projectDetails, setProjectDetails] = useState(savedState?.projectDetails || initialProjectDetails);
+  const [specs, setSpecs] = useState(savedState?.specs || initialSpecs);
+  const [processSteps, setProcessSteps] = useState(savedState?.processSteps || initialProcessSteps);
+  const [processFlowTitle, setProcessFlowTitle] = useState(savedState?.processFlowTitle || initialProcessFlowTitle);
+  const [attendees, setAttendees] = useState(savedState?.attendees || initialAttendees);
+  const [meetingDate, setMeetingDate] = useState(savedState?.meetingDate || initialMeetingDate);
+
+  useEffect(() => {
+    const stateToSave = { appTitle, projectDetails, specs, processSteps, processFlowTitle, attendees, meetingDate };
+    saveState(stateToSave);
+  }, [appTitle, projectDetails, specs, processSteps, processFlowTitle, attendees, meetingDate]);
+
+  const TABS = ['總覽與時程 (Overview & Schedule)', '規格與流程 (Specs & Process Flow)', '與會人員 (Attendees)'];
+
+  const handleAppTitleChange = (newTitle) => setAppTitle(newTitle);
+  const handleProjectNameChange = (newName) => setProjectDetails(prev => ({ ...prev, id: newName }));
+  const handleDetailChange = (key, value) => setProjectDetails(prev => ({ ...prev, [key]: key === 'quantity' ? Number(value) || 0 : value }));
+  const handleSpecChange = (specId, itemKey, value) => {
+    setSpecs(prev => prev.map(spec => {
+      if (spec.id === specId) {
+        if (itemKey === 'title') return { ...spec, title: String(value) };
+        return { ...spec, items: { ...spec.items, [itemKey]: value } };
+      }
+      return spec;
+    }));
+  };
+  const handleSpecItemKeyChange = (specId, oldKey, newKey) => {
+    if (!newKey || oldKey === newKey) return;
+    setSpecs(prev => prev.map(spec => {
+      if (spec.id === specId) {
+        const newItems = {};
+        for (const [key, value] of Object.entries(spec.items)) {
+            newItems[key === oldKey ? newKey : key] = value;
+        }
+        return { ...spec, items: newItems };
+      }
+      return spec;
+    }));
+  };
+  const handleAddSpec = () => {
+    const newSpec = { id: crypto.randomUUID(), title: 'New Spec', items: {} };
+    setSpecs(prev => [...prev, newSpec]);
+  };
+  const handleAddSpecItem = (specId) => {
+    setSpecs(prev => prev.map(spec => {
+      if (spec.id === specId) {
+        let i = 1; let newKey = `Parameter ${i}`;
+        while (Object.prototype.hasOwnProperty.call(spec.items, newKey)) { newKey = `Parameter ${++i}`; }
+        return { ...spec, items: { ...spec.items, [newKey]: 'New Value' } };
+      }
+      return spec;
+    }));
+  };
+  const handleDeleteSpecItem = (specId, itemKey) => {
+    setSpecs(prev => prev.map(spec => {
+      if (spec.id === specId) {
+        const newItems = { ...spec.items }; delete newItems[itemKey];
+        return { ...spec, items: newItems };
+      }
+      return spec;
+    }));
+  };
+  const handleDeleteSpec = (specId) => {
+    setProcessSteps(prev => prev.map(step => step.relatedSpecId === specId ? { ...step, relatedSpecId: null } : step));
+    setSpecs(prev => prev.filter(spec => spec.id !== specId));
+  };
+  const handleReorderSpecs = (newSpecs) => setSpecs(newSpecs);
+  const handleStepChange = (stepId, key, value) => setProcessSteps(prev => prev.map(step => (step.id === stepId ? { ...step, [key]: value } : step)));
+  const handleBulkStepDateChange = (stepIds, key, value) => setProcessSteps(prev => prev.map(step => stepIds.includes(step.id) ? { ...step, [key]: value } : step));
+  const handleLinkStepToSpec = (stepId, specId) => setProcessSteps(prev => prev.map(step => step.id === stepId ? { ...step, relatedSpecId: specId } : step));
+  const handleAddStep = () => {
+    const newStep = { id: crypto.randomUUID(), name: 'New Step', details: 'Click to edit details for the new step.', type: 'process', isActive: true, startDate: '', endDate: '' };
+    setProcessSteps(prev => [...prev, newStep]);
+  };
+  const handleDeleteStep = (stepId) => setProcessSteps(prev => prev.filter(step => step.id !== stepId));
+  const handleToggleStep = (stepId) => setProcessSteps(prev => prev.map(step => step.id === stepId ? { ...step, isActive: !step.isActive } : step));
+  const handleReorderSteps = (newSteps) => setProcessSteps(newSteps);
+  const handleProcessFlowTitleChange = (newTitle) => setProcessFlowTitle(newTitle);
+  const handleAttendeesChange = (value) => setAttendees(value.split('\n').filter(name => name.trim() !== ''));
+  const handleMeetingDateChange = (newDate) => setMeetingDate(newDate);
+
+  const scheduleTasks = useMemo(() => {
+    const dayFormatter = new Intl.DateTimeFormat('zh-TW-u-ca-chinese', { weekday: 'short' });
+    const getDay = (dateStr) => {
+        try { const date = new Date(dateStr + 'T00:00:00'); if (isNaN(date.getTime())) return '-'; return dayFormatter.format(date).replace('週', ''); } catch { return '-'; }
+    };
+    const derivedTasks = processSteps
+      .filter(step => step.isActive && step.startDate)
+      .flatMap(step => {
+        const tasksForStep = [];
+        try {
+            const start = new Date(step.startDate); start.setHours(0, 0, 0, 0);
+            let end = step.endDate ? new Date(step.endDate) : new Date(start); end.setHours(0, 0, 0, 0);
+            if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return [];
+            
+            const firstDayNotes = () => {
+                let note = step.details;
+                if (step.relatedSpecId) {
+                    const spec = specs.find(s => s.id === step.relatedSpecId);
+                    if (spec && Object.keys(spec.items).length > 0) {
+                        note += ` | Related Spec: ${spec.title} | ${Object.entries(spec.items).map(([key, value]) => `${key}: ${String(value)}`).join('; ')}`;
+                    }
+                }
+                return note;
+            };
+
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                tasksForStep.push({ date: d.toISOString().split('T')[0], day: getDay(d.toISOString().split('T')[0]), task: step.name, notes: d.getTime() === start.getTime() ? firstDayNotes() : `(續)`, ganttGroup: step.type });
+            }
+        } catch { return []; }
+        return tasksForStep;
+      });
+
+    const allTasks = [...derivedTasks];
+    if (projectDetails.targetShipDate) {
+        allTasks.push({ date: projectDetails.targetShipDate, day: getDay(projectDetails.targetShipDate), task: '目標出貨 (Target Ship Date)', notes: `Final shipment for ${projectDetails.quantity} pcs.`, highlight: 'text-red-700 font-bold', ganttGroup: 'Shipment' });
+    }
+    return allTasks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [processSteps, specs, projectDetails.targetShipDate, projectDetails.quantity]);
+
+  const ganttTasks = useMemo(() => {
+    return processSteps
+      .filter(step => step.isActive && step.startDate && step.endDate)
+      .map(step => {
+        const start = new Date(step.startDate);
+        const end = new Date(step.endDate);
+        return { name: step.name, start: start, end: end.getHours() === 0 && end.getMinutes() === 0 ? new Date(end.getTime() + 24 * 60 * 60 * 1000 - 1) : end };
+      })
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [processSteps]);
+
+  const handleSaveAsPdf = () => window.print();
+
+  return (
+    <div className="min-h-screen p-4 sm:p-6 md:p-8">
+      <div className="max-w-7xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 sm:p-6 md:p-8 border border-amber-200 dark:border-slate-700 print-container">
+        <Header projectName={projectDetails.id} onProjectNameChange={handleProjectNameChange} onSaveAsPdf={handleSaveAsPdf} appTitle={appTitle} onAppTitleChange={handleAppTitleChange} />
+        <Tabs tabs={TABS} activeTab={activeTab} onTabClick={setActiveTab} />
+        <main>
+          <div className={activeTab === '總覽與時程 (Overview & Schedule)' ? '' : 'hidden print-show'}>
+             <TabContentWrapper title="總覽 (Overview)" isFirstPrintSection={true}>
+                <OverviewTab details={projectDetails} tasks={ganttTasks} onDetailChange={handleDetailChange} />
+            </TabContentWrapper>
+            <TabContentWrapper title="時程與任務 (Schedule)">
+                <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
+            </TabContentWrapper>
+          </div>
+          <div className={activeTab === '規格與流程 (Specs & Process Flow)' ? '' : 'hidden print-show'}>
+            <TabContentWrapper title="流程 (Process Flow)">
+               <ProcessFlowTab steps={processSteps} specs={specs} projectId={projectDetails.id} title={processFlowTitle} onTitleChange={handleProcessFlowTitleChange} onStepChange={handleStepChange} onBulkStepDateChange={handleBulkStepDateChange} onAddStep={handleAddStep} onDeleteStep={handleDeleteStep} onToggleStep={handleToggleStep} onReorderSteps={handleReorderSteps} onLinkStepToSpec={handleLinkStepToSpec} />
+            </TabContentWrapper>
+            <TabContentWrapper title="規格 (Specs)">
+              <SpecsTab specs={specs} onSpecChange={handleSpecChange} onAddSpec={handleAddSpec} onDeleteSpec={handleDeleteSpec} onAddSpecItem={handleAddSpecItem} onDeleteSpecItem={handleDeleteSpecItem} onSpecItemKeyChange={handleSpecItemKeyChange} onReorderSpecs={handleReorderSpecs} />
+            </TabContentWrapper>
+          </div>
+          <div className={activeTab === '與會人員 (Attendees)' ? '' : 'hidden print-show'}>
+             <TabContentWrapper title="與會人員 (Attendees)">
+                <AttendeesTab attendees={attendees} onAttendeesChange={handleAttendeesChange} date={meetingDate} onDateChange={handleMeetingDateChange} />
+            </TabContentWrapper>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+
+// --- From index.tsx ---
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
+    </script>
 
     <!-- PWA Service Worker -->
     <script>
