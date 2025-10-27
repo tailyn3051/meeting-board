@@ -368,7 +368,7 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-  const monthName = currentDate.toLocaleString('default', { month: 'long' });
+  const monthName = `${month + 1}月`;
   const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
@@ -404,7 +404,7 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
 
   const days = [];
   for (let i = 0; i < firstDayOfMonth; i++) {
-    days.push(<div key={`empty-${i}`} className="p-2"></div>);
+    days.push(<div key={`empty-${i}`} className="p-2 h-10 w-10"></div>);
   }
   for (let day = 1; day <= daysInMonth; day++) {
     const isEvent = isEventDay(day);
