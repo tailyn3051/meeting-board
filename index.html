@@ -1147,40 +1147,178 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
 
 
 // --- From components/OverviewTab.tsx ---
-const OverviewTab = ({ details, scheduleTasks, onDetailChange }) => {
-  return (
-    <section className="space-y-6">
-      <p className="text-base text-gray-700 dark:text-slate-300">
-        此儀表板整合了 {details.id} NPI 試產的關鍵資訊。您可以在此查看專案的總體概況、關鍵指標以及高階時程。使用上方的頁籤來深入了解特定的規格、製造流程或詳細的任務列表。
-      </p>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 card-print-grid">
-        <Card title="專案料號" className="print-card">
-          <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
-        </Card>
-        <Card title="試產數量" className="print-card">
-          <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
-        </Card>
-        <Card title="PCB 尺寸 (mm)" className="print-card">
-          <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
-        </Card>
-        <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20 print-card">
-          <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-xl font-semibold text-red-700 dark:text-red-500" />
-        </Card>
-      </div>
-      <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
-        <h2 className="text-xl font-semibold mb-4 text-amber-900 dark:text-amber-400">專案時程 (Schedule)</h2>
-        <p className="text-sm text-gray-600 dark:text-slate-400 mb-4">
-          此為詳細的 NPI 試產任務時程表，包含所有關鍵日期、任務、QC 檢查點與最終交付物。
-        </p>
-        <div className="no-print">
-            <ScheduleTimelineView tasks={scheduleTasks} className="h-[60vh]" />
-        </div>
-        <div className="hidden print:block">
-            <SchedulePrintView tasks={scheduleTasks} />
-        </div>
-      </div>
-    </section>
-  );
+const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle }) => {
+    const { useState, useMemo } = React;
+    const [draggedSpecId, setDraggedSpecId] = useState(null);
+
+    const relatedSpecIds = useMemo(() => {
+        const ids = new Set();
+        processSteps
+            .filter(step => step.isActive && step.relatedSpecId)
+            .forEach(step => ids.add(step.relatedSpecId));
+        return ids;
+    }, [processSteps]);
+
+    const relatedSpecs = useMemo(() => {
+        return specs.filter(spec => relatedSpecIds.has(spec.id));
+    }, [specs, relatedSpecIds]);
+    
+    const activeSteps = useMemo(() => processSteps.filter(s => s.isActive), [processSteps]);
+
+    const handleDragStart = (e, id) => {
+        setDraggedSpecId(id);
+        e.dataTransfer.effectAllowed = 'move';
+        e.currentTarget.style.opacity = '0.5';
+        e.currentTarget.classList.add('shadow-2xl');
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+    };
+
+    const handleDrop = (e, targetId) => {
+        e.preventDefault();
+        if (!draggedSpecId || draggedSpecId === targetId) return;
+
+        const draggedIndex = specs.findIndex(s => s.id === draggedSpecId);
+        const targetIndex = specs.findIndex(s => s.id === targetId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        const newSpecs = [...specs];
+        const [draggedItem] = newSpecs.splice(draggedIndex, 1);
+        newSpecs.splice(targetIndex, 0, draggedItem);
+
+        onReorderSpecs(newSpecs);
+        setDraggedSpecId(null);
+    };
+
+    const handleDragEnd = (e) => {
+        e.currentTarget.style.opacity = '1';
+        e.currentTarget.classList.remove('shadow-2xl');
+        setDraggedSpecId(null);
+    };
+
+    const ProcessFlowDiagramNode = ({ step, index, totalActiveSteps }) => {
+        const isFirst = index === 0;
+        const isLast = index === totalActiveSteps - 1;
+
+        let bgColor = 'bg-teal-500';
+        if (isFirst) bgColor = 'bg-sky-500';
+        if (isLast) bgColor = 'bg-emerald-500';
+
+        let clipPathStyle = {};
+        if (totalActiveSteps > 1) {
+            if (isFirst) clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%)' };
+            else if (isLast) clipPathStyle = { clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 1.25rem 50%)' };
+            else clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%, 1.25rem 50%)' };
+        }
+
+        return (
+            <div
+                className={`flex items-center justify-start h-12 text-white font-semibold ${bgColor}`}
+                style={{ ...clipPathStyle, paddingLeft: isFirst || totalActiveSteps === 1 ? '1rem' : '2.25rem', paddingRight: isLast || totalActiveSteps === 1 ? '1rem' : '2.25rem' }}
+            >
+                <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-full bg-white/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    </div>
+                    <span className="text-center whitespace-nowrap">{step.name}</span>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <section className="space-y-6">
+            <p className="text-base text-gray-700 dark:text-slate-300">
+                此儀表板整合了 {details.id} NPI 試產的關鍵資訊。您可以在此查看專案的總體概況、關鍵指標以及高階時程。使用上方的頁籤來深入了解特定的規格、製造流程或詳細的任務列表。
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 card-print-grid">
+                <Card title="專案料號" className="print-card">
+                    <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
+                </Card>
+                <Card title="試產數量" className="print-card">
+                    <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
+                </Card>
+                <Card title="PCB 尺寸 (mm)" className="print-card">
+                    <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
+                </Card>
+                <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20 print-card">
+                    <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-xl font-semibold text-red-700 dark:text-red-500" />
+                </Card>
+            </div>
+            
+            <div className="flex flex-col lg:flex-row lg:space-x-6 space-y-6 lg:space-y-0 no-print">
+                {/* Left Column: Related Specs */}
+                <div className="lg:w-1/3 xl:w-1/4 flex-shrink-0">
+                    <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">相關規格 (Related Specs)</h3>
+                    <div className="space-y-4">
+                        {relatedSpecs.length > 0 ? relatedSpecs.map(spec => (
+                            <div 
+                                key={spec.id} 
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, spec.id)}
+                                onDragOver={handleDragOver}
+                                onDrop={(e) => handleDrop(e, spec.id)}
+                                onDragEnd={handleDragEnd}
+                                className="bg-white dark:bg-slate-800/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 cursor-move transition-shadow"
+                            >
+                                <h4 className="font-semibold text-amber-800 dark:text-amber-400">{spec.title}</h4>
+                                <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700 dark:text-slate-300">
+                                    {Object.entries(spec.items || {}).map(([key, value]) => (
+                                        <li key={key}>
+                                            <span className="font-medium">{key}:</span> {String(value)}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )) : (
+                           <div className="flex items-center justify-center h-48 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-gray-300 dark:border-slate-700">
+                             <p className="text-center text-gray-500 dark:text-slate-400 p-4">No specs are currently linked to active process steps.</p>
+                           </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right Column: Process Flow */}
+                <div className="lg:w-2/3 xl:w-3/4 bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col items-center">
+                    <h2 className="text-xl font-semibold mb-8 text-amber-900 dark:text-amber-400 text-center">{processFlowTitle}</h2>
+                    <div className="flex flex-wrap items-center justify-center gap-2 py-4">
+                        {activeSteps.map((step, index) => (
+                            <ProcessFlowDiagramNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="hidden print:block">
+                <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Related Specifications</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {relatedSpecs.map(spec => (
+                     <div key={`print-spec-${spec.id}`} className="bg-white dark:bg-slate-800/50 p-4 rounded-lg border border-amber-100 dark:border-slate-700 print:border-gray-300 print:break-inside-avoid">
+                         <h4 className="font-semibold text-amber-800 dark:text-amber-400">{spec.title}</h4>
+                         <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700 dark:text-slate-300">
+                             {Object.entries(spec.items || {}).map(([key, value]) => (
+                                 <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>
+                             ))}
+                         </ul>
+                     </div>
+                  ))}
+                </div>
+                
+                <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">{processFlowTitle}</h3>
+                <ol className="list-decimal list-inside space-y-2">
+                    {activeSteps.map(step => (
+                        <li key={`print-overview-step-${step.id}`}>
+                            <strong>{step.name}:</strong> 
+                            <span className="text-gray-600 ml-2">{step.details}</span>
+                        </li>
+                    ))}
+                </ol>
+            </div>
+        </section>
+    );
 };
 
 
@@ -1521,7 +1659,14 @@ const App = () => {
           <div className="tab-content mt-6">
             <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
               <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
-                <OverviewTab details={projectDetails} scheduleTasks={scheduleTasks} onDetailChange={handleProjectDetailChange} />
+                <OverviewTab 
+                    details={projectDetails}
+                    onDetailChange={handleProjectDetailChange}
+                    specs={specs}
+                    processSteps={processSteps}
+                    onReorderSpecs={handleReorderSpecs}
+                    processFlowTitle={processFlowTitle}
+                />
               </TabContentWrapper>
             </div>
             <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
@@ -1575,7 +1720,14 @@ const App = () => {
           
           <div className="hidden print:block space-y-12">
             <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
-                <OverviewTab details={projectDetails} scheduleTasks={scheduleTasks} onDetailChange={handleProjectDetailChange} />
+                <OverviewTab 
+                    details={projectDetails} 
+                    onDetailChange={handleProjectDetailChange} 
+                    specs={specs} 
+                    processSteps={processSteps} 
+                    onReorderSpecs={() => {}} 
+                    processFlowTitle={processFlowTitle}
+                />
             </TabContentWrapper>
             <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
                 <AttendeesTab attendees={attendees} onAttendeesChange={() => {}} date={meetingDate} onDateChange={() => {}} />
