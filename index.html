@@ -1010,16 +1010,16 @@ const OverviewTab = ({ details, tasks, onDetailChange }) => {
       </p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 card-print-grid">
         <Card title="專案料號" className="print-card">
-          <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-2xl font-semibold text-amber-900 dark:text-amber-400" />
+          <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
         </Card>
         <Card title="試產數量" className="print-card">
-          <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-2xl font-semibold text-amber-900 dark:text-amber-400" />
+          <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
         </Card>
         <Card title="PCB 尺寸 (mm)" className="print-card">
-          <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-lg font-semibold text-amber-900 dark:text-amber-400" />
+          <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
         </Card>
         <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20 print-card">
-          <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-2xl font-semibold text-red-700 dark:text-red-500" />
+          <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-xl font-semibold text-red-700 dark:text-red-500" />
         </Card>
       </div>
       <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
@@ -1301,7 +1301,7 @@ const App = () => {
           </div>
         </main>
         <footer className="text-center text-xs text-gray-400 dark:text-slate-500 mt-8">
-            ver-0.6
+            ver-0.7
         </footer>
       </div>
     </div>
