@@ -628,7 +628,7 @@ const ScheduleTab = ({ tasks, onTaskChange }) => {
                 <div>
                   <h4 className="text-lg font-semibold text-amber-800 dark:text-amber-500 mb-3">{relatedSpec.title}</h4>
                   <ul className="list-disc list-outside ml-5 space-y-2 text-gray-800 dark:text-slate-300">
-                    {Object.entries(relatedSpec.items).map(([key, value]) => (
+                    {Object.entries(relatedSpec.items || {}).map(([key, value]) => (
                       <li key={key}>
                         <span className="font-medium">{key}:</span> {String(value)}
                       </li>
@@ -803,7 +803,7 @@ const SpecsTab = ({ specs, onSpecChange, onAddSpec, onDeleteSpec, onAddSpecItem,
             </h3>
             <div className="flex-grow">
               <ul className="list-disc list-outside ml-5 space-y-2 text-gray-800 dark:text-slate-300">
-                {Object.entries(spec.items).map(([key, value]) => (
+                {Object.entries(spec.items || {}).map(([key, value]) => (
                   <li key={key} className="group/item flex items-center">
                     <EditableField
                       as="span"
@@ -1079,7 +1079,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
                                     {relatedSpec ? (
                                         <div className="bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-inner border border-amber-200 dark:border-slate-700 h-full">
                                             <h4 className="text-md font-semibold text-amber-800 dark:text-amber-400 mb-2">{relatedSpec.title}</h4>
-                                            <ul className="list-disc list-outside ml-5 space-y-1 text-sm text-gray-700 dark:text-slate-300">{Object.entries(relatedSpec.items).map(([key, value]) => <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>)}</ul>
+                                            <ul className="list-disc list-outside ml-5 space-y-1 text-sm text-gray-700 dark:text-slate-300">{Object.entries(relatedSpec.items || {}).map(([key, value]) => <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>)}</ul>
                                         </div>
                                     ) : (
                                         <div className="flex items-center justify-center bg-gray-50 dark:bg-slate-700/50 rounded-lg h-full min-h-[150px] border border-dashed border-gray-300 dark:border-slate-600/50">
@@ -1420,8 +1420,8 @@ const App = () => {
               
               let notes = `${step.details} (${startTime} - ${endTime})`;
               if (relatedSpec) {
-                const specDetails = Object.entries(relatedSpec.items).map(([k,v]) => `${k}: ${v}`).join('; ');
-                notes += ` | Related Spec: ${relatedSpec.title} | ${specDetails}`;
+                const specDetails = Object.entries(relatedSpec.items || {}).map(([k,v]) => `${k}: ${v}`).join('; ');
+                notes += ` | Related Spec: ${relatedSpec.title || ''} | ${specDetails}`;
               }
 
               tasks.push({
