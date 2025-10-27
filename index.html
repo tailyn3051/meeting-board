@@ -21,7 +21,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
-        /* Custom print styles for WYSIWYG output */
+        /* Custom print styles for a clean, formatted document */
         @media print {
           body {
             -webkit-print-color-adjust: exact;
@@ -29,79 +29,23 @@
             background: #fff !important;
             color: #000 !important;
             font-size: 10pt;
-            margin: 0;
-            padding: 0;
           }
           .no-print {
             display: none !important;
           }
-          .print-container {
-            box-shadow: none !important;
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            backdrop-filter: none !important;
-            background: transparent !important;
-            border-radius: 0 !important;
-          }
-          .shadow-md, .shadow-lg, .shadow-inner {
-            box-shadow: none !important;
-          }
-          h1, h2, h3 {
-            page-break-after: avoid;
-          }
+          /* Ensure cards and sections don't break across pages */
           .print-break-inside-avoid {
             break-inside: avoid;
           }
-
-          /* --- WYSIWYG Print Styles --- */
-          
-          /* Remove fixed heights to allow content to flow across pages */
-          .h-\[75vh\], .min-h-\[200px\], .min-h-\[150px\], .min-h-\[120px\] {
-            height: auto !important;
-            min-height: auto !important;
+          /* Remove shadows and excessive borders for cleaner output */
+          .shadow-md, .shadow-lg, .shadow-inner {
+            box-shadow: none !important;
           }
-
-          /* Handle the Schedule Timeline for printing */
-          .overflow-x-auto {
-            overflow: visible !important;
+          .border {
+             border-color: #e5e7eb !important; /* A light gray border */
           }
-          .min-w-max {
-            /* Allows timeline columns to wrap onto new lines on the page */
-            display: flex;
-            flex-wrap: wrap !important;
-            min-width: 0 !important;
-            justify-content: flex-start;
-          }
-          .flex-shrink-0 {
-             /* Allow columns to shrink if needed, though wrap is preferred */
-            flex-shrink: 1 !important;
-          }
-
-          /* On Overview tab, stack columns vertically instead of side-by-side */
-          .lg\:flex-row {
-            flex-direction: column !important;
-          }
-          .lg\:w-1\/4, .lg\:w-3\/4, .xl\:w-1\/5, .xl\:w-4\/5 {
-            width: 100% !important;
-          }
-           /* Remove spacing between stacked columns */
-          .lg\:space-x-6 > :not([hidden]) ~ :not([hidden]) {
-            --tw-space-x-reverse: 0;
-            margin-right: calc(0px * var(--tw-space-x-reverse));
-            margin-left: calc(0px * calc(1 - var(--tw-space-x-reverse)));
-          }
-          .space-y-6 > :not([hidden]) ~ :not([hidden]) {
-             --tw-space-y-reverse: 0;
-             margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
-             margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
-          }
-          .lg\:space-y-0 {
-             --tw-space-y-reverse: 0;
-             margin-top: calc(0px * calc(1 - var(--tw-space-y-reverse)));
-             margin-bottom: calc(0px * var(--tw-space-y-reverse));
+           h1, h2, h3 {
+            page-break-after: avoid;
           }
         }
     </style>
@@ -364,7 +308,7 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
 // --- From components/Header.tsx ---
 const Header = ({ projectName, onProjectNameChange, onSaveAsPdf, appTitle, onAppTitleChange, onReset }) => {
     return (
-        <header className="mb-6 print:break-after-page">
+        <header className="mb-6">
             <div className="flex justify-between items-start">
                 <div>
                     <EditableField
@@ -446,7 +390,7 @@ const TabContentWrapper = ({ title, children, isFirstPrintSection = false, class
 const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
   return (
     <section className="space-y-6">
-      <p className="text-base text-gray-700 dark:text-slate-300">
+      <p className="text-base text-gray-700 dark:text-slate-300 no-print">
         請在此處列出本次會議的與會人員，每行一位。
       </p>
       <div className="bg-white dark:bg-slate-800/50 p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
@@ -1625,104 +1569,178 @@ const App = () => {
         return indexA - indexB;
       });
   }, [processSteps, specs]);
+  
+  const activeSteps = useMemo(() => processSteps.filter(s => s.isActive), [processSteps]);
+  const relatedSpecIds = useMemo(() => {
+    const ids = new Set();
+    processSteps
+        .filter(step => step.isActive && step.relatedSpecId)
+        .forEach(step => ids.add(step.relatedSpecId));
+    return ids;
+  }, [processSteps]);
+  const relatedSpecs = useMemo(() => {
+    return specs.filter(spec => relatedSpecIds.has(spec.id));
+  }, [specs, relatedSpecIds]);
 
   const tabs = ['Overview', 'Specs', 'Process Flow', 'Attendees'];
   
+  const PrintProcessFlowDiagramNode = ({ step, index, totalActiveSteps }) => {
+    const isFirst = index === 0;
+    const isLast = index === totalActiveSteps - 1;
+    let bgColor = 'bg-teal-500';
+    if (isFirst) bgColor = 'bg-sky-500';
+    if (isLast) bgColor = 'bg-emerald-500';
+
+    let clipPathStyle = {};
+    if (totalActiveSteps > 1) {
+        if (isFirst) clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1rem) 0%, 100% 50%, calc(100% - 1rem) 100%, 0% 100%)' };
+        else if (isLast) clipPathStyle = { clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 1rem 50%)' };
+        else clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1rem) 0%, 100% 50%, calc(100% - 1rem) 100%, 0% 100%, 1rem 50%)' };
+    }
+
+    return (
+        <div className={`flex items-center justify-start h-10 text-white font-semibold text-sm ${bgColor}`} style={{ ...clipPathStyle, paddingLeft: isFirst || totalActiveSteps === 1 ? '0.75rem' : '1.75rem', paddingRight: isLast || totalActiveSteps === 1 ? '0.75rem' : '1.75rem' }}>
+            <div className="flex items-center gap-2">
+                <div className="h-4 w-4 flex-shrink-0 flex items-center justify-center rounded-full bg-white/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                </div>
+                <span className="text-center whitespace-nowrap">{step.name}</span>
+            </div>
+        </div>
+    );
+  };
+  
   return (
-    <div className="mx-auto p-4 md:p-8 print-container">
-        <Header 
-            appTitle={appTitle}
-            onAppTitleChange={setAppTitle}
-            projectName={projectName} 
-            onProjectNameChange={setProjectName} 
-            onSaveAsPdf={handleSaveAsPdf}
-            onReset={handleReset}
-        />
-        <main>
-          <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
-          <div className="tab-content mt-6">
-            <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
-                <OverviewTab 
-                    details={projectDetails}
-                    onDetailChange={handleProjectDetailChange}
-                    specs={specs}
-                    processSteps={processSteps}
-                    onReorderSpecs={handleReorderSpecs}
-                    processFlowTitle={processFlowTitle}
-                    scheduleTasks={scheduleTasks}
-                    onScheduleTaskChange={handleScheduleTaskChange}
-                    onReorderStep={handleReorderProcessStep}
-                    onSpecChange={handleSpecChange}
-                    onSpecItemKeyChange={handleSpecItemKeyChange}
-                />
-            </div>
-            <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
-              <TabContentWrapper title="技術規格 (Specifications)">
-                <SpecsTab 
-                    specs={specs} 
-                    onSpecChange={handleSpecChange}
-                    onAddSpec={handleAddSpec}
-                    onDeleteSpec={handleDeleteSpec}
-                    onAddSpecItem={handleAddSpecItem}
-                    onDeleteSpecItem={handleDeleteSpecItem}
-                    onSpecItemKeyChange={handleSpecItemKeyChange}
-                    onReorderSpecs={handleReorderSpecs}
-                />
-              </TabContentWrapper>
-            </div>
-             <div className={activeTab !== 'Process Flow' ? 'hidden' : ''}>
-                <TabContentWrapper title="製程與流程 (Process Flow)">
-                    <ProcessFlowTab 
-                        steps={processSteps}
-                        specs={specs}
-                        projectId={projectDetails.id}
-                        title={processFlowTitle}
-                        onTitleChange={setProcessFlowTitle}
-                        onStepChange={handleProcessStepChange}
-                        onBulkStepDateChange={handleBulkStepDateChange}
-                        onAddStep={handleAddStep}
-                        onDeleteStep={handleDeleteStep}
-                        onToggleStep={handleToggleStep}
-                        onReorderSteps={handleReorderSteps}
-                        onLinkStepToSpec={handleLinkStepToSpec}
-                    />
+    <>
+      <div className="mx-auto p-4 md:p-8 print-container no-print">
+          <Header 
+              appTitle={appTitle}
+              onAppTitleChange={setAppTitle}
+              projectName={projectName} 
+              onProjectNameChange={setProjectName} 
+              onSaveAsPdf={handleSaveAsPdf}
+              onReset={handleReset}
+          />
+          <main>
+            <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
+            <div className="tab-content mt-6">
+              <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
+                  <OverviewTab 
+                      details={projectDetails}
+                      onDetailChange={handleProjectDetailChange}
+                      specs={specs}
+                      processSteps={processSteps}
+                      onReorderSpecs={handleReorderSpecs}
+                      processFlowTitle={processFlowTitle}
+                      scheduleTasks={scheduleTasks}
+                      onScheduleTaskChange={handleScheduleTaskChange}
+                      onReorderStep={handleReorderProcessStep}
+                      onSpecChange={handleSpecChange}
+                      onSpecItemKeyChange={handleSpecItemKeyChange}
+                  />
+              </div>
+              <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
+                <TabContentWrapper title="技術規格 (Specifications)">
+                  <SpecsTab 
+                      specs={specs} 
+                      onSpecChange={handleSpecChange}
+                      onAddSpec={handleAddSpec}
+                      onDeleteSpec={handleDeleteSpec}
+                      onAddSpecItem={handleAddSpecItem}
+                      onDeleteSpecItem={handleDeleteSpecItem}
+                      onSpecItemKeyChange={handleSpecItemKeyChange}
+                      onReorderSpecs={handleReorderSpecs}
+                  />
                 </TabContentWrapper>
-             </div>
-             <div className={activeTab !== 'Attendees' ? 'hidden' : ''}>
-                 <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
-                    <AttendeesTab 
-                        attendees={attendees} 
-                        onAttendeesChange={handleAttendeesChange} 
-                        date={meetingDate}
-                        onDateChange={setMeetingDate}
-                    />
-                </TabContentWrapper>
-             </div>
+              </div>
+               <div className={activeTab !== 'Process Flow' ? 'hidden' : ''}>
+                  <TabContentWrapper title="製程與流程 (Process Flow)">
+                      <ProcessFlowTab 
+                          steps={processSteps}
+                          specs={specs}
+                          projectId={projectDetails.id}
+                          title={processFlowTitle}
+                          onTitleChange={setProcessFlowTitle}
+                          onStepChange={handleProcessStepChange}
+                          onBulkStepDateChange={handleBulkStepDateChange}
+                          onAddStep={handleAddStep}
+                          onDeleteStep={handleDeleteStep}
+                          onToggleStep={handleToggleStep}
+                          onReorderSteps={handleReorderSteps}
+                          onLinkStepToSpec={handleLinkStepToSpec}
+                      />
+                  </TabContentWrapper>
+               </div>
+               <div className={activeTab !== 'Attendees' ? 'hidden' : ''}>
+                   <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
+                      <AttendeesTab 
+                          attendees={attendees} 
+                          onAttendeesChange={handleAttendeesChange} 
+                          date={meetingDate}
+                          onDateChange={setMeetingDate}
+                      />
+                  </TabContentWrapper>
+               </div>
+            </div>
+          </main>
+      </div>
+
+      {/* --- DEDICATED PRINT LAYOUT --- */}
+      <div className="hidden print:block p-4 font-sans text-black">
+          {/* Page 1: Overview */}
+          <div>
+              <h1 className="text-3xl font-bold text-amber-900">{appTitle}</h1>
+              <h2 className="text-xl text-gray-700 mt-1">專案：{projectName}</h2>
+              
+              <div className="my-6 space-y-6">
+                  <div className="grid grid-cols-4 gap-4">
+                      <Card title="專案料號"><p className="text-lg font-semibold">{projectDetails.id || '(empty)'}</p></Card>
+                      <Card title="試產數量"><p className="text-lg font-semibold">{projectDetails.quantity} pcs</p></Card>
+                      <Card title="PCB 尺寸 (mm)"><p className="text-lg font-semibold">{projectDetails.pcbSize || '(empty)'}</p></Card>
+                      <Card title="目標出貨日"><p className="text-lg font-semibold text-red-700">{projectDetails.targetShipDate || '(empty)'}</p></Card>
+                  </div>
+                  
+                  <div className="p-2 md:p-3 rounded-lg border">
+                      <div className="flex flex-wrap items-center justify-center gap-2 py-2">
+                          {activeSteps.map((step, index) => (
+                              <PrintProcessFlowDiagramNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="space-y-4 print-break-inside-avoid">
+                      <h3 className="text-xl font-bold border-b pb-2">Related Specs</h3>
+                      <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
+                          {relatedSpecs.length > 0 ? relatedSpecs.map(spec => (
+                              <div key={spec.id} className="bg-white p-3 rounded-lg border mb-4 print-break-inside-avoid">
+                                  <h4 className="font-semibold text-amber-800">{spec.title}</h4>
+                                  <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700">
+                                      {Object.entries(spec.items || {}).map(([key, value]) => (
+                                          <li key={key}><strong>{key}:</strong> {String(value)}</li>
+                                      ))}
+                                  </ul>
+                              </div>
+                          )) : (
+                             <p className="text-gray-500 col-span-full">No specs are currently linked to active process steps.</p>
+                          )}
+                      </div>
+                  </div>
+
+                  <div>
+                      <h3 className="text-xl font-bold border-b pb-2 mb-4">Detailed Schedule</h3>
+                      <SchedulePrintView tasks={scheduleTasks} />
+                  </div>
+              </div>
           </div>
           
-          <div className="hidden">
-            {/* This was the old print-only view, it is now disabled in favor of WYSIWYG printing. */}
-            <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
-                <OverviewTab 
-                    details={projectDetails} 
-                    onDetailChange={() => {}} 
-                    specs={specs} 
-                    processSteps={processSteps} 
-                    onReorderSpecs={() => {}} 
-                    processFlowTitle={processFlowTitle}
-                    scheduleTasks={scheduleTasks}
-                    onScheduleTaskChange={() => {}}
-                    onReorderStep={() => {}}
-                    onSpecChange={() => {}}
-                    onSpecItemKeyChange={() => {}}
-                />
-            </TabContentWrapper>
-            <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
-                <AttendeesTab attendees={attendees} onAttendeesChange={() => {}} date={meetingDate} onDateChange={() => {}} />
-            </TabContentWrapper>
+          {/* Page 2: Attendees */}
+          <div className="print:break-before-page">
+               <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
+                  <AttendeesTab attendees={attendees} onAttendeesChange={() => {}} date={meetingDate} onDateChange={() => {}} />
+              </TabContentWrapper>
           </div>
-        </main>
-    </div>
+      </div>
+    </>
   );
 };
 
