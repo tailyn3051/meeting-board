@@ -551,7 +551,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                                 <h3 className="font-bold text-lg text-amber-900 dark:text-amber-400">{date}</h3>
                                 <p className="text-sm text-gray-600 dark:text-slate-400">{firstTask.day}</p>
                             </div>
-                            <div className="p-3 space-y-3 overflow-y-auto flex-1">
+                            <div className="p-2 space-y-2 overflow-y-auto flex-1">
                                 {tasksOnDate.map((task) => {
                                     const timeRange = task.isMultiDay ? task.notes.match(/\(([^)]+)\)/)?.[1] || '' : `${task.startTime} - ${task.endTime}`;
                                     return (
@@ -562,21 +562,21 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                                             onDragOver={(e) => handleDragOver(e, task.stepId)}
                                             onDragLeave={handleDragLeave}
                                             onDrop={(e) => handleItemDrop(e, task.stepId, date)}
-                                            className={`bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${dragOverStepId === task.stepId ? 'ring-2 ring-blue-500' : ''}`}
+                                            className={`bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${dragOverStepId === task.stepId ? 'ring-2 ring-blue-500' : ''}`}
                                             title={task.notes}
                                         >
                                             <EditableField 
                                                 as="h4" 
                                                 initialValue={task.task} 
                                                 onSave={(v) => onTaskChange(task.id, 'name', v)}
-                                                className={`font-semibold ${task.highlight || 'text-gray-800 dark:text-slate-200'}`}
+                                                className={`font-semibold text-sm ${task.highlight || 'text-gray-800 dark:text-slate-200'}`}
                                             />
                                             <EditableField
                                                 as="p"
                                                 initialValue={timeRange}
                                                 onSave={(v) => onTaskChange(task.id, 'time', v)}
-                                                className="text-sm text-gray-600 dark:text-slate-400 mt-1"
-                                                inputClassName="text-sm"
+                                                className="text-xs text-gray-600 dark:text-slate-400"
+                                                inputClassName="text-xs"
                                             />
                                         </div>
                                     )
@@ -1104,7 +1104,7 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
     };
 
     return (
-        <section className="space-y-8">
+        <section className="space-y-4">
             <p className="text-base text-gray-700 dark:text-slate-300">
                 此儀表板整合了 {details.id} NPI 試產的關鍵資訊。您可以在此查看專案的總體概況、關鍵指標以及高階時程。使用上方的頁籤來深入了解特定的規格、製造流程或詳細的任務列表。
             </p>
@@ -1126,8 +1126,8 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
             </div>
             
             {/* 2. Process Flow Diagram */}
-            <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col items-center">
-                <div className="flex flex-wrap items-center justify-center gap-2 py-4">
+            <div className="bg-white dark:bg-slate-800/50 p-2 md:p-3 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col items-center">
+                <div className="flex flex-wrap items-center justify-center gap-2 py-2">
                     {activeSteps.map((step, index) => (
                         <ProcessFlowDiagramNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />
                     ))}
@@ -1186,7 +1186,7 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                 {/* Right Column: Schedule Timeline */}
                 <div className="lg:w-3/4 xl:w-4/5">
                     <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Schedule Timeline</h3>
-                    <div className="h-[65vh] bg-white dark:bg-slate-800/50 p-1 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
+                    <div className="h-[75vh] bg-white dark:bg-slate-800/50 p-1 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
                          <ScheduleTimelineView 
                             tasks={scheduleTasks} 
                             onTaskChange={onScheduleTaskChange}
