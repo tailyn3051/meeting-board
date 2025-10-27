@@ -127,6 +127,7 @@ interface ProcessStep {
 
 interface ScheduleTask {
   id: string;
+  stepId: string;
   date: string;
   day: string;
   task: string;
@@ -490,8 +491,8 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskMove, className = '' 
         );
     }
     
-    const handleDragStart = (e, taskId) => {
-        e.dataTransfer.setData('taskId', taskId);
+    const handleDragStart = (e, stepId) => {
+        e.dataTransfer.setData('stepId', stepId);
         e.dataTransfer.effectAllowed = 'move';
     };
     
@@ -506,9 +507,9 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskMove, className = '' 
     
     const handleDrop = (e, targetDate) => {
         e.preventDefault();
-        const taskId = e.dataTransfer.getData('taskId');
-        if (taskId) {
-            onTaskMove(taskId, targetDate);
+        const stepId = e.dataTransfer.getData('stepId');
+        if (stepId) {
+            onTaskMove(stepId, targetDate);
         }
         setDragOverDate(null);
     };
@@ -538,7 +539,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskMove, className = '' 
                                         <div 
                                             key={task.id} 
                                             draggable
-                                            onDragStart={(e) => handleDragStart(e, task.id)}
+                                            onDragStart={(e) => handleDragStart(e, task.stepId)}
                                             className={`bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
                                             title={task.notes}
                                         >
@@ -998,7 +999,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
 
 
 // --- From components/OverviewTab.tsx ---
-const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks, onScheduleTaskChange, onScheduleTaskMove }) => {
+const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks, onScheduleTaskChange, onScheduleTaskMove, onSpecChange, onSpecItemKeyChange }) => {
     const { useState, useMemo } = React;
     const [draggedSpecId, setDraggedSpecId] = useState(null);
 
@@ -1127,11 +1128,27 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                                 onDragEnd={handleDragEnd}
                                 className="bg-white dark:bg-slate-800/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 cursor-move transition-shadow"
                             >
-                                <h4 className="font-semibold text-amber-800 dark:text-amber-400">{spec.title}</h4>
+                                <EditableField
+                                    as="h4"
+                                    initialValue={spec.title}
+                                    onSave={(newValue) => onSpecChange(spec.id, 'title', newValue)}
+                                    className="font-semibold text-amber-800 dark:text-amber-400"
+                                />
                                 <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700 dark:text-slate-300">
                                     {Object.entries(spec.items || {}).map(([key, value]) => (
-                                        <li key={key}>
-                                            <span className="font-medium">{key}:</span> {String(value)}
+                                        <li key={key} className="flex">
+                                            <EditableField
+                                              as="span"
+                                              initialValue={key}
+                                              onSave={(newKey) => onSpecItemKeyChange(spec.id, key, newKey)}
+                                              className="font-medium mr-1"
+                                            />:
+                                            <EditableField
+                                              as="span"
+                                              initialValue={value}
+                                              onSave={(newValue) => onSpecChange(spec.id, key, newValue)}
+                                              className="flex-grow ml-2"
+                                            />
                                         </li>
                                     ))}
                                 </ul>
@@ -1454,7 +1471,7 @@ const App = () => {
   };
 
   const handleScheduleTaskChange = (taskId, field, value) => {
-    const stepId = taskId.split('-')[0];
+    const stepId = taskId.substring(0, taskId.lastIndexOf('-'));
     const stepToUpdate = processSteps.find(s => s.id === stepId);
     if (!stepToUpdate) return;
 
@@ -1483,8 +1500,7 @@ const App = () => {
     }
   };
 
-  const handleScheduleTaskMove = (taskId, newDateStr) => {
-    const stepId = taskId.split('-')[0];
+  const handleScheduleTaskMove = (stepId, newDateStr) => {
     const stepToMove = processSteps.find(s => s.id === stepId);
     if (!stepToMove || !stepToMove.startDate || !stepToMove.endDate) return;
 
@@ -1545,6 +1561,7 @@ const App = () => {
 
               tasks.push({
                   id: `${step.id}-${dateStr}`,
+                  stepId: step.id,
                   date: dateStr,
                   day: dayOfWeek,
                   task: step.name,
@@ -1589,6 +1606,8 @@ const App = () => {
                     scheduleTasks={scheduleTasks}
                     onScheduleTaskChange={handleScheduleTaskChange}
                     onScheduleTaskMove={handleScheduleTaskMove}
+                    onSpecChange={handleSpecChange}
+                    onSpecItemKeyChange={handleSpecItemKeyChange}
                 />
             </div>
             <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
@@ -1647,6 +1666,8 @@ const App = () => {
                     scheduleTasks={scheduleTasks}
                     onScheduleTaskChange={() => {}}
                     onScheduleTaskMove={() => {}}
+                    onSpecChange={() => {}}
+                    onSpecItemKeyChange={() => {}}
                 />
             </TabContentWrapper>
             <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
