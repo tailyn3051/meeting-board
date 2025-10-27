@@ -570,8 +570,17 @@ const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
 
 // --- From components/ScheduleTab.tsx ---
 const ScheduleTab = ({ tasks, specs, onTaskChange }) => {
-  const { useState, useMemo } = React;
+  const { useState, useMemo, useEffect } = React;
   const [selectedTask, setSelectedTask] = useState(null);
+
+  useEffect(() => {
+    // If there's no selected task, or the selected task is no longer in the list,
+    // default to the first task in the new list.
+    const isSelectedTaskInList = selectedTask && tasks.some(t => t.id === selectedTask.id);
+    if (!isSelectedTaskInList && tasks && tasks.length > 0) {
+      setSelectedTask(tasks[0]);
+    }
+  }, [tasks]);
 
   // Group tasks by date
   const tasksByDate = useMemo(() => {
@@ -612,7 +621,7 @@ const ScheduleTab = ({ tasks, specs, onTaskChange }) => {
       {/* New Flex Layout for screen */}
       <div className="flex space-x-6 h-[70vh] no-print">
         {/* Left Side: Spec Details */}
-        <div className="w-1/3 flex-shrink-0 bg-white dark:bg-slate-800/50 p-6 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col">
+        <div className="w-1/4 flex-shrink-0 bg-white dark:bg-slate-800/50 p-6 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col">
           <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">相關規格 (Related Spec)</h3>
           <div className="flex-grow overflow-y-auto">
             {selectedTask ? (
@@ -641,7 +650,7 @@ const ScheduleTab = ({ tasks, specs, onTaskChange }) => {
         </div>
         
         {/* Right Side: Timeline View */}
-        <div className="w-2/3 overflow-x-auto pb-4">
+        <div className="w-3/4 overflow-x-auto pb-4">
           <div className="flex space-x-4 min-w-max h-full">
             {sortedDates.map(date => {
               const tasksOnDate = tasksByDate[date];
