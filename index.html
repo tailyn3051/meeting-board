@@ -269,26 +269,27 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
 
-  const isToday = (day) => 
-    today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
-
+  const isToday = (day) => {
+    const d = new Date();
+    return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
+  }
+  
   const isEventDay = (day) => {
-    if (!showEvents) return false;
-    const checkDate = new Date(year, month, day);
-    checkDate.setHours(0, 0, 0, 0);
-
-    return events.some(event => {
-      if (!event.startDate || !event.endDate) return false;
-      try {
-        const startDate = new Date(event.startDate);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(event.endDate);
-        endDate.setHours(0, 0, 0, 0);
-        return checkDate >= startDate && checkDate <= endDate;
-      } catch {
-        return false;
-      }
-    });
+      if (!showEvents) return false;
+      const checkDate = new Date(year, month, day);
+      checkDate.setHours(0, 0, 0, 0);
+  
+      return events.some(event => {
+          if (!event.startDate) return false;
+          try {
+              const eventDate = new Date(event.startDate);
+              const localEventDate = new Date(eventDate.getTime() + eventDate.getTimezoneOffset() * 60000);
+              localEventDate.setHours(0, 0, 0, 0);
+              return checkDate.getTime() === localEventDate.getTime();
+          } catch {
+              return false;
+          }
+      });
   };
 
   const isSelectedDay = (day) => {
@@ -463,11 +464,19 @@ const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
   );
 };
 
+const formatDateToISO = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
-// --- Modified Component: ScheduleTimelineView ---
+// --- From components/ScheduleTimelineView.tsx ---
 const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = '' }) => {
     const { useMemo, useState } = React;
-    const [dragOverStepId, setDragOverStepId] = useState(null);
+    const [dragOverInfo, setDragOverInfo] = useState({ stepId: null, position: null });
 
     const tasksByDate = useMemo(() => {
         if (!tasks) return {};
@@ -498,1275 +507,644 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
     
     const handleDragOver = (e, targetStepId) => {
         e.preventDefault();
-        setDragOverStepId(targetStepId);
+        const rect = e.currentTarget.getBoundingClientRect();
+        const position = e.clientY > rect.top + rect.height / 2 ? 'bottom' : 'top';
+        setDragOverInfo({ stepId: targetStepId, position });
     };
 
     const handleDragLeave = () => {
-        setDragOverStepId(null);
+        setDragOverInfo({ stepId: null, position: null });
     };
     
-    const handleItemDrop = (e, targetStepId, targetDate) => {
+    const handleDrop = (e, targetStepId, targetDate) => {
         e.preventDefault();
-        e.stopPropagation(); // Prevent column drop handler from firing
         const draggedStepId = e.dataTransfer.getData('stepId');
-        if (draggedStepId && targetStepId) {
-            onTaskReorder(draggedStepId, targetStepId, targetDate);
-        }
-        setDragOverStepId(null);
-    };
+        const dropPosition = dragOverInfo.position;
+        handleDragLeave();
 
+        if (draggedStepId && draggedStepId !== targetStepId) {
+            onTaskReorder(draggedStepId, targetStepId, targetDate, dropPosition);
+        }
+    };
+    
     const handleColumnDrop = (e, date) => {
         e.preventDefault();
         const draggedStepId = e.dataTransfer.getData('stepId');
-        const tasksOnDate = tasksByDate[date] || [];
-        // If dropping on column, target is the last item on that day for reordering purposes.
-        // If empty, target is null, which means just change date and sort chronologically.
-        const lastTaskOnDate = tasksOnDate[tasksOnDate.length - 1];
-        const targetStepId = lastTaskOnDate ? lastTaskOnDate.stepId : null;
+        handleDragLeave();
+        
         if (draggedStepId) {
-            // Avoid dropping on self if it's the only item in the column
-            if (tasksOnDate.length === 1 && tasksOnDate[0].stepId === draggedStepId) return;
-            onTaskReorder(draggedStepId, targetStepId, date);
+            onTaskReorder(draggedStepId, null, date, 'bottom'); // Drop at the end of the column
         }
-        setDragOverStepId(null);
     };
-
+    
+    const getDayOfWeek = (dateString) => {
+        const date = new Date(dateString);
+        const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+        return utcDate.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週', '');
+    }
 
     return (
-        <div className={`overflow-x-auto pb-4 h-full ${className}`}>
-            <div className="flex space-x-4 min-w-max h-full">
-                {sortedDates.map(date => {
-                    const tasksOnDate = tasksByDate[date];
-                    const firstTask = tasksOnDate && tasksOnDate.length > 0 ? tasksOnDate[0] : null;
-                    if (!firstTask) return null; // Defensive check for empty date columns
-
-                    return (
-                        <div 
-                            key={date}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => handleColumnDrop(e, date)}
-                            className={`w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full`}
-                        >
-                            <div className="p-3 bg-amber-100 dark:bg-slate-700 rounded-t-xl border-b border-amber-200 dark:border-slate-600 sticky top-0 z-10">
-                                <h3 className="font-bold text-lg text-amber-900 dark:text-amber-400">{date}</h3>
-                                <p className="text-sm text-gray-600 dark:text-slate-400">{firstTask.day}</p>
-                            </div>
-                            <div className="p-3 space-y-3 overflow-y-auto flex-1">
-                                {tasksOnDate.map((task) => {
-                                    const timeRange = task.isMultiDay ? task.notes.match(/\(([^)]+)\)/)?.[1] || '' : `${task.startTime} - ${task.endTime}`;
-                                    return (
-                                        <div 
-                                            key={task.id} 
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, task.stepId)}
-                                            onDragOver={(e) => handleDragOver(e, task.stepId)}
-                                            onDragLeave={handleDragLeave}
-                                            onDrop={(e) => handleItemDrop(e, task.stepId, date)}
-                                            className={`bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${dragOverStepId === task.stepId ? 'ring-2 ring-blue-500' : ''}`}
-                                            title={task.notes}
-                                        >
-                                            <EditableField 
-                                                as="h4" 
-                                                initialValue={task.task} 
-                                                onSave={(v) => onTaskChange(task.id, 'name', v)}
-                                                className={`font-semibold ${task.highlight || 'text-gray-800 dark:text-slate-200'}`}
-                                            />
-                                            <EditableField
-                                                as="p"
-                                                initialValue={timeRange}
-                                                onSave={(v) => onTaskChange(task.id, 'time', v)}
-                                                className="text-sm text-gray-600 dark:text-slate-400 mt-1"
-                                                inputClassName="text-sm"
-                                            />
-                                        </div>
-                                    )
-                                })}
-                            </div>
+        <div className={`grid grid-flow-col auto-cols-fr gap-3 overflow-x-auto pb-4 ${className}`} style={{ minHeight: '300px' }}>
+            {sortedDates.map(date => {
+                const tasksForDate = tasksByDate[date];
+                return (
+                    <div 
+                        key={date} 
+                        className="bg-amber-100/50 dark:bg-slate-800/60 p-3 rounded-lg flex flex-col min-w-[160px] md:min-w-[180px]"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => handleColumnDrop(e, date)}
+                    >
+                        <div className="font-semibold text-amber-900 dark:text-amber-400 text-sm mb-1">{date}</div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mb-3">{getDayOfWeek(date)}</div>
+                        <div className="space-y-2 flex-grow">
+                            {tasksForDate.map(task => (
+                                <div
+                                    key={task.stepId}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, task.stepId)}
+                                    onDragOver={(e) => handleDragOver(e, task.stepId)}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={(e) => handleDrop(e, task.stepId, date)}
+                                    className={`relative bg-white dark:bg-slate-700 p-2.5 rounded-md shadow-sm border border-transparent cursor-move transition-all duration-200`}
+                                >
+                                    {dragOverInfo.stepId === task.stepId && dragOverInfo.position === 'top' && <div className="absolute -top-1 left-0 w-full h-1 bg-blue-500 rounded-full" />}
+                                    <EditableField
+                                        as="div"
+                                        initialValue={task.task}
+                                        onSave={(newValue) => onTaskChange(task.stepId, 'name', newValue)}
+                                        className="font-medium text-gray-800 dark:text-slate-200 text-sm"
+                                        inputClassName="font-medium text-sm"
+                                    />
+                                    <EditableField
+                                        as="div"
+                                        initialValue={`${task.startTime} - ${task.endTime}`}
+                                        onSave={(newValue) => {
+                                            const [start, end] = newValue.split(' - ');
+                                            onTaskChange(task.stepId, 'time', { startTime: start?.trim(), endTime: end?.trim() });
+                                        }}
+                                        className="text-xs text-gray-500 dark:text-slate-400 mt-1"
+                                        inputClassName="text-xs"
+                                    />
+                                    {dragOverInfo.stepId === task.stepId && dragOverInfo.position === 'bottom' && <div className="absolute -bottom-1 left-0 w-full h-1 bg-blue-500 rounded-full" />}
+                                </div>
+                            ))}
                         </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
-
-// --- New Component: SchedulePrintView ---
-const SchedulePrintView = ({ tasks }) => {
-    return (
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 overflow-hidden">
-            <div className="overflow-x-auto print:overflow-visible">
-                <table className="w-full min-w-[600px] print:min-w-full text-left">
-                    <thead className="bg-amber-100 dark:bg-slate-700/50 border-b border-amber-200 dark:border-slate-600">
-                        <tr>
-                            <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">日期</th>
-                            <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">星期</th>
-                            <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">任務 / 事件</th>
-                            <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">備註</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-amber-100 dark:divide-slate-700">
-                        {(tasks || []).map((task, index) => {
-                            const showDate = index === 0 || tasks[index - 1].date !== task.date;
-                            return (
-                                <tr key={index} className="hover:bg-amber-50/70 dark:hover:bg-slate-700/50 print:break-inside-avoid">
-                                    <td className="p-4 align-top">
-                                        {showDate && (
-                                            <div className="font-semibold text-gray-900 dark:text-slate-200 whitespace-nowrap">{task.date}</div>
-                                        )}
-                                    </td>
-                                    <td className="p-4 align-top">
-                                        {showDate && (
-                                            <div className="text-gray-900 dark:text-slate-200">{task.day}</div>
-                                        )}
-                                    </td>
-                                    <td className={`p-4 align-top font-medium ${task.highlight || 'text-gray-800 dark:text-slate-300'}`}>
-                                        <div>{task.task}</div>
-                                    </td>
-                                    <td className={`p-4 align-top ${task.highlight?.includes('red') ? 'font-bold text-red-700 dark:text-red-500' : 'text-gray-800 dark:text-slate-300'}`}>
-                                        <div style={{ whiteSpace: 'pre-wrap' }}>{task.notes}</div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
+                    </div>
+                );
+            })}
         </div>
     );
 };
 
 
 // --- From components/SpecsTab.tsx ---
-const SpecsTab = ({ specs, onSpecChange, onAddSpec, onDeleteSpec, onAddSpecItem, onDeleteSpecItem, onSpecItemKeyChange, onReorderSpecs }) => {
-  const { useState } = React;
-  const [draggedSpecId, setDraggedSpecId] = useState(null);
-
-  const handleDragStart = (e, id) => {
-    setDraggedSpecId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.currentTarget.style.opacity = '0.5';
-    e.currentTarget.classList.add('shadow-2xl', 'border-amber-400', 'dark:border-amber-500');
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e, targetId) => {
-    e.preventDefault();
-    if (!draggedSpecId || draggedSpecId === targetId) return;
-
-    const draggedIndex = specs.findIndex(s => s.id === draggedSpecId);
-    const targetIndex = specs.findIndex(s => s.id === targetId);
-    
-    const newSpecs = [...specs];
-    const [draggedItem] = newSpecs.splice(draggedIndex, 1);
-    newSpecs.splice(targetIndex, 0, draggedItem);
-    
-    onReorderSpecs(newSpecs);
-    setDraggedSpecId(null);
-  };
-
-  const handleDragEnd = (e) => {
-    e.currentTarget.style.opacity = '1';
-    e.currentTarget.classList.remove('shadow-2xl', 'border-amber-400', 'dark:border-amber-500');
-    setDraggedSpecId(null);
-  };
-
-  return (
-    <section className="space-y-6">
-      <p className="text-base text-gray-700 dark:text-slate-300">
-        此處詳列了本次試產的關鍵技術規格與製程參數。這些是確保品質與一致性的重要依據。
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {specs.map((spec) => (
-          <div 
-            key={spec.id} 
-            draggable
-            onDragStart={(e) => handleDragStart(e, spec.id)}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, spec.id)}
-            onDragEnd={handleDragEnd}
-            className="group/card relative bg-white dark:bg-slate-800/50 p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col print:break-inside-avoid cursor-move transition-all duration-200"
-          >
-            <button
-              onClick={() => onDeleteSpec(spec.id)}
-              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold opacity-0 group-hover/card:opacity-100 transition-opacity z-10 no-print"
-              title="Delete Spec"
-            >
-              &times;
-            </button>
-            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-3">
-              <EditableField
-                  as="span"
-                  initialValue={spec.title}
-                  onSave={(newValue) => onSpecChange(spec.id, 'title', newValue)}
-                  className="w-full"
-              />
-            </h3>
-            <div className="flex-grow">
-              <ul className="list-disc list-outside ml-5 space-y-2 text-gray-800 dark:text-slate-300">
-                {Object.entries(spec.items || {}).map(([key, value]) => (
-                  <li key={key} className="group/item flex items-center">
-                    <EditableField
-                      as="span"
-                      initialValue={key}
-                      onSave={(newKey) => onSpecItemKeyChange(spec.id, key, newKey)}
-                      className="font-medium mr-1"
-                    />:
-                    <EditableField
-                      as="span"
-                      initialValue={value}
-                      onSave={(newValue) => onSpecChange(spec.id, key, newValue)}
-                      className="flex-grow ml-2"
-                    />
-                     <button
-                        onClick={() => onDeleteSpecItem(spec.id, key)}
-                        className="ml-2 text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity text-lg no-print"
-                        title="Delete parameter"
-                      >
-                        &times;
-                      </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-4 no-print">
-               <button
-                  onClick={() => onAddSpecItem(spec.id)}
-                  className="text-sm font-medium p-1 rounded-md cursor-pointer transition-colors duration-200 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/10"
-                >
-                  + Add Parameter
-                </button>
-            </div>
-          </div>
-        ))}
-      </div>
-       <div className="text-center mt-8 no-print">
-        <button
-            onClick={onAddSpec}
-            className="font-medium p-3 rounded-lg shadow-sm cursor-pointer transition-all duration-200 ease-in-out bg-green-200 text-green-900 dark:bg-green-500/20 dark:text-green-300 dark:hover:bg-green-500/30 hover:transform hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            Add New Spec +
-          </button>
-      </div>
-    </section>
-  );
-};
-
-
-// --- From components/ProcessFlowTab.tsx ---
-const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepChange, onBulkStepDateChange, onAddStep, onDeleteStep, onToggleStep, onReorderSteps, onLinkStepToSpec }) => {
-  const { useState, useMemo, useEffect } = React;
-  const [selectedStepIds, setSelectedStepIds] = useState(() => {
-    const firstActive = steps.find(s => s.isActive);
-    return firstActive ? [firstActive.id] : [];
-  });
-  const [draggedItemId, setDraggedItemId] = useState(null);
-  const [editingDateField, setEditingDateField] = useState('startDate');
-  const [isLinkingSpec, setIsLinkingSpec] = useState(false);
-
-  useEffect(() => {
-    const currentlyActiveSelection = selectedStepIds.filter(id => 
-        steps.find(step => step.id === id)?.isActive
-    );
-    if (currentlyActiveSelection.length !== selectedStepIds.length) {
-        setSelectedStepIds(currentlyActiveSelection);
-    }
-  }, [steps, selectedStepIds]);
-
-  useEffect(() => {
-    setEditingDateField('startDate');
-    setIsLinkingSpec(false);
-  }, [selectedStepIds.join(',')]);
-
-  const activeSteps = useMemo(() => steps.filter(s => s.isActive), [steps]);
-  const inactiveSteps = useMemo(() => steps.filter(s => !s.isActive), [steps]);
-
-  const handleDragStart = (e, id) => {
-    setDraggedItemId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.currentTarget.style.opacity = '0.5';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault(); 
-  };
-
-  const handleDrop = (e, targetId) => {
-    e.preventDefault();
-    if (!draggedItemId || draggedItemId === targetId) return;
-
-    const reorderedActiveSteps = [...activeSteps];
-    const draggedIndex = reorderedActiveSteps.findIndex(s => s.id === draggedItemId);
-    const targetIndex = reorderedActiveSteps.findIndex(s => s.id === targetId);
-    
-    if (draggedIndex === -1 || targetIndex === -1) return;
-    
-    const [draggedItem] = reorderedActiveSteps.splice(draggedIndex, 1);
-    reorderedActiveSteps.splice(targetIndex, 0, draggedItem);
-    
-    onReorderSteps([...reorderedActiveSteps, ...inactiveSteps]);
-    setDraggedItemId(null);
-  };
-
-  const handleDragEnd = (e) => {
-    e.currentTarget.style.opacity = '1';
-    setDraggedItemId(null);
-  };
-  
-  const handleStepSelect = (stepId, isMultiSelect) => {
-    if (isMultiSelect) {
-        setSelectedStepIds(prev => 
-            prev.includes(stepId) 
-                ? prev.filter(id => id !== stepId)
-                : [...prev, stepId]
-        );
-    } else {
-        // Prevent re-render if this step is already the only one selected
-        if (selectedStepIds.length === 1 && selectedStepIds[0] === stepId) {
-            return;
-        }
-        setSelectedStepIds([stepId]);
-    }
-  };
-
-  const selectedStep = useMemo(() => {
-    if (selectedStepIds.length === 1) {
-        return steps.find(s => s.id === selectedStepIds[0]);
-    }
-    return null;
-  }, [selectedStepIds, steps]);
-
-  const relatedSpec = useMemo(() => {
-    if (!selectedStep || !selectedStep.relatedSpecId) return null;
-    return specs.find(spec => spec.id === selectedStep.relatedSpecId);
-  }, [selectedStep, specs]);
-  
-  const handleDateSelect = (date) => {
-    if (selectedStepIds.length > 0 && editingDateField) {
-        if (editingDateField === 'startDate') {
-            date.setHours(9, 0, 0, 0);
-        } else {
-            date.setHours(17, 0, 0, 0);
-        }
-        
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        const formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
-
-        onBulkStepDateChange(selectedStepIds, editingDateField, formattedDate);
-
-        if (editingDateField === 'startDate') {
-            setEditingDateField('endDate');
-        }
-    }
-  };
-  
-  const selectedDateForCalendar = useMemo(() => {
-    if (selectedStepIds.length !== 1) return null;
-    const step = steps.find(s => s.id === selectedStepIds[0]);
-    if (!step) return null;
-    const dateString = editingDateField === 'startDate' ? step.startDate : step.endDate;
-    if (dateString) {
-        try { return new Date(dateString); } catch { return null; }
-    }
-    return null;
-  }, [selectedStepIds, steps, editingDateField]);
-  
-  const getCommonDateValue = (field) => {
-      if (selectedStepIds.length === 0) return '';
-      const firstStep = steps.find(s => s.id === selectedStepIds[0]);
-      if (!firstStep) return '';
-      const firstDate = firstStep[field];
-      const allSame = selectedStepIds.every(id => {
-          const step = steps.find(s => s.id === id);
-          return step && step[field] === firstDate;
-      });
-      return allSame ? firstDate : '';
-  };
-
-  const ActiveStepNode = ({ step, index, totalActiveSteps }) => {
-    const isSelected = selectedStepIds.includes(step.id);
-    const isFirst = index === 0;
-    const isLast = index === totalActiveSteps - 1;
-
-    let bgColor = 'bg-teal-500 hover:bg-teal-600';
-    if (isFirst) bgColor = 'bg-sky-500 hover:bg-sky-600';
-    if (isLast) bgColor = 'bg-emerald-500 hover:bg-emerald-600';
-
-    let clipPathStyle = {};
-    if (totalActiveSteps > 1) {
-        if (isFirst) clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%)' };
-        else if (isLast) clipPathStyle = { clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 1.25rem 50%)' };
-        else clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%, 1.25rem 50%)' };
-    }
-
+const SpecsTab = ({ specs, onSpecChange, onAddSpec, onRemoveSpec }) => {
     return (
-      <div
-        draggable
-        onDragStart={(e) => handleDragStart(e, step.id)}
-        onDragOver={handleDragOver}
-        onDrop={(e) => handleDrop(e, step.id)}
-        onDragEnd={handleDragEnd}
-        onClick={(e) => handleStepSelect(step.id, e.ctrlKey || e.metaKey)}
-        className={`group/step relative flex items-center justify-start h-12 text-white font-semibold transition-all duration-200 cursor-move ${bgColor}`}
-        style={{ ...clipPathStyle, filter: isSelected ? 'drop-shadow(0 0 8px #f59e0b)' : 'none', paddingLeft: isFirst || totalActiveSteps === 1 ? '1rem' : '2.25rem', paddingRight: isLast || totalActiveSteps === 1 ? '1rem' : '2.25rem' }}
-      >
-        <div className="relative z-10 flex items-center gap-2">
-            <button
-                onClick={(e) => { e.stopPropagation(); onToggleStep(step.id); }}
-                className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 transition-colors no-print"
-                title="Mark as Skipped"
-            >
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-            </button>
-            <EditableField as="span" initialValue={step.name} onSave={(v) => onStepChange(step.id, 'name', v)} className="text-center whitespace-nowrap" inputClassName="text-black dark:text-white font-semibold text-sm" />
-        </div>
-        <button
-            onClick={(e) => { e.stopPropagation(); onDeleteStep(step.id); }}
-            className="absolute top-[-8px] right-[8px] bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs opacity-0 group-hover/step:opacity-100 hover:bg-red-600 transition-all z-20 no-print"
-            title="Delete Step"
-        >&times;</button>
-      </div>
-    );
-  };
-
-  const SkippedStepNode = ({ step }) => (
-    <button onClick={() => onToggleStep(step.id)} className="flex items-center justify-center gap-2 h-12 w-40 rounded-md border-2 border-dashed border-gray-300 dark:border-slate-600 text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 hover:border-gray-400 dark:hover:border-slate-500 transition-colors no-print" title="Re-activate Step">
-      <div className="h-5 w-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-300 dark:bg-slate-600 text-gray-600 dark:text-slate-300 text-sm font-bold">+</div>
-      <span className="truncate">{step.name}</span>
-    </button>
-  );
-
-  return (
-    <section className="space-y-6">
-      <p className="text-base text-gray-700 dark:text-slate-300">This is the complete manufacturing and quality control flow for {projectId}. Drag steps to reorder, click the status icon to activate/deactivate, double-click names to edit, or click a step to view details. Use <strong>Ctrl/Cmd + Click</strong> to select multiple steps.</p>
-      <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
-        <EditableField as="h2" initialValue={title} onSave={onTitleChange} className="text-xl font-semibold mb-12 text-amber-900 dark:text-amber-400 text-center" inputClassName="text-xl font-semibold text-center" />
-        <div className="flex flex-wrap items-center justify-center gap-2 py-4 print:hidden">
-          {activeSteps.map((step, index) => <ActiveStepNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />)}
-           <button onClick={onAddStep} className="ml-2 h-12 w-40 flex items-center justify-center rounded-md border-2 border-dashed border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 font-semibold cursor-pointer transition-all duration-200 ease-in-out hover:bg-green-100 dark:hover:bg-green-500/20 hover:border-green-500 dark:hover:border-green-500 no-print">Add Step +</button>
-        </div>
-        {inactiveSteps.length > 0 && (
-          <div className="mt-16 pt-8 border-t border-dashed border-amber-300 dark:border-slate-700 no-print">
-            <h3 className="text-lg font-semibold text-gray-600 dark:text-slate-400 mb-6 text-center">Skipped Steps</h3>
-            <div className="flex flex-wrap items-center justify-center gap-8">{inactiveSteps.map(step => <SkippedStepNode key={step.id} step={step} />)}</div>
-          </div>
-        )}
-        <div className="mt-12 mb-6 border-t border-amber-200 dark:border-slate-700 pt-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2">
-                    {selectedStepIds.length > 1 && <div className="mb-6 p-3 text-center bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg text-amber-900 dark:text-amber-300 font-semibold">{selectedStepIds.length} steps selected. You can now bulk edit their dates below.</div>}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">步驟詳情 (Details):</h3>
-                            <div className="mt-2 p-1 bg-amber-50 dark:bg-slate-700 rounded-lg min-h-[120px] text-gray-800 dark:text-slate-300 border border-amber-200 dark:border-slate-600 transition-all duration-300">
-                                {selectedStep ? <EditableField as="div" initialValue={selectedStep.details} onSave={(newValue) => onStepChange(selectedStep.id, 'details', newValue)} className="p-3 w-full h-full" inputClassName="p-3" /> : <div className="p-3 text-gray-500 dark:text-slate-500 flex items-center justify-center h-full no-print">{selectedStepIds.length > 1 ? "Details for single steps shown here." : "Select an active step above to view or edit its details."}</div>}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">相關規格 (Related Specs):</h3>
-                            {isLinkingSpec && selectedStep ? (
-                                <div className="bg-white dark:bg-slate-600 p-4 rounded-lg shadow-inner border border-blue-400 h-full mt-2 no-print">
-                                    <select value={selectedStep.relatedSpecId || ''} onChange={(e) => { onLinkStepToSpec(selectedStep.id, e.target.value || null); setIsLinkingSpec(false); }} onBlur={() => setIsLinkingSpec(false)} autoFocus className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-600">
-                                        <option value="" className="text-gray-500">-- No Related Spec --</option>
-                                        {specs.map(spec => <option key={spec.id} value={spec.id} className="text-black bg-white dark:text-white dark:bg-slate-600">{spec.title}</option>)}
-                                    </select>
-                                </div>
-                            ) : (
-                                <div onDoubleClick={() => { if (selectedStep) setIsLinkingSpec(true); }} title={selectedStep ? "Double-click to change related spec" : ""} className={`h-full mt-2 ${selectedStep ? 'cursor-pointer' : ''} print:cursor-default`}>
-                                    {relatedSpec ? (
-                                        <div className="bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-inner border border-amber-200 dark:border-slate-700 h-full">
-                                            <h4 className="text-md font-semibold text-amber-800 dark:text-amber-400 mb-2">{relatedSpec.title}</h4>
-                                            <ul className="list-disc list-outside ml-5 space-y-1 text-sm text-gray-700 dark:text-slate-300">{Object.entries(relatedSpec.items || {}).map(([key, value]) => <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>)}</ul>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center justify-center bg-gray-50 dark:bg-slate-700/50 rounded-lg h-full min-h-[150px] border border-dashed border-gray-300 dark:border-slate-600/50">
-                                            <p className="text-gray-500 dark:text-slate-500 text-center p-4">{selectedStepIds.length > 1 ? "Specs for single steps shown here." : selectedStep ? "No related specs for this step." : "Select a step to see specs."}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    {selectedStepIds.length > 0 && (
-                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 border-t border-amber-200 dark:border-slate-700 pt-6 no-print">
-                            <div onClick={() => setEditingDateField('startDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'startDate' ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
-                                <h4 className="text-sm font-semibold text-gray-600 dark:text-slate-400 mb-1">Start Date/Time</h4>
-                                <EditableField type="datetime-local" initialValue={getCommonDateValue('startDate')} onSave={(v) => onBulkStepDateChange(selectedStepIds, 'startDate', v)} className="p-2 border dark:border-slate-600 rounded-md w-full" inputClassName="p-2" />
-                            </div>
-                            <div onClick={() => setEditingDateField('endDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'endDate' ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
-                                <h4 className="text-sm font-semibold text-gray-600 dark:text-slate-400 mb-1">End Date/Time</h4>
-                                <EditableField type="datetime-local" initialValue={getCommonDateValue('endDate')} onSave={(v) => onBulkStepDateChange(selectedStepIds, 'endDate', v)} className="p-2 border dark:border-slate-600 rounded-md w-full" inputClassName="p-2" />
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="lg:col-span-1 no-print">
-                    <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">專案日曆 (Project Calendar):</h3>
-                    <div className="bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-inner border border-amber-200 dark:border-slate-700 mt-2">
-                        <Calendar events={steps} onDateClick={handleDateSelect} selectedDate={selectedDateForCalendar} />
-                    </div>
-                </div>
-            </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-
-// --- From components/OverviewTab.tsx ---
-const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks, onScheduleTaskChange, onReorderStep, onSpecChange, onSpecItemKeyChange }) => {
-    const { useState, useMemo } = React;
-    const [draggedSpecId, setDraggedSpecId] = useState(null);
-
-    const relatedSpecIds = useMemo(() => {
-        const ids = new Set();
-        processSteps
-            .filter(step => step.isActive && step.relatedSpecId)
-            .forEach(step => ids.add(step.relatedSpecId));
-        return ids;
-    }, [processSteps]);
-
-    const relatedSpecs = useMemo(() => {
-        return specs.filter(spec => relatedSpecIds.has(spec.id));
-    }, [specs, relatedSpecIds]);
-    
-    const activeSteps = useMemo(() => processSteps.filter(s => s.isActive), [processSteps]);
-
-    const handleDragStart = (e, id) => {
-        setDraggedSpecId(id);
-        e.dataTransfer.effectAllowed = 'move';
-        e.currentTarget.style.opacity = '0.5';
-        e.currentTarget.classList.add('shadow-2xl');
-    };
-
-    const handleDragOver = (e) => {
-        e.preventDefault();
-    };
-
-    const handleDrop = (e, targetId) => {
-        e.preventDefault();
-        if (!draggedSpecId || draggedSpecId === targetId) return;
-
-        const draggedIndex = specs.findIndex(s => s.id === draggedSpecId);
-        const targetIndex = specs.findIndex(s => s.id === targetId);
-
-        if (draggedIndex === -1 || targetIndex === -1) return;
-
-        const newSpecs = [...specs];
-        const [draggedItem] = newSpecs.splice(draggedIndex, 1);
-        newSpecs.splice(targetIndex, 0, draggedItem);
-
-        onReorderSpecs(newSpecs);
-        setDraggedSpecId(null);
-    };
-
-    const handleDragEnd = (e) => {
-        e.currentTarget.style.opacity = '1';
-        e.currentTarget.classList.remove('shadow-2xl');
-        setDraggedSpecId(null);
-    };
-
-    const ProcessFlowDiagramNode = ({ step, index, totalActiveSteps }) => {
-        const isFirst = index === 0;
-        const isLast = index === totalActiveSteps - 1;
-
-        let bgColor = 'bg-teal-500';
-        if (isFirst) bgColor = 'bg-sky-500';
-        if (isLast) bgColor = 'bg-emerald-500';
-
-        let clipPathStyle = {};
-        if (totalActiveSteps > 1) {
-            if (isFirst) clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%)' };
-            else if (isLast) clipPathStyle = { clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 1.25rem 50%)' };
-            else clipPathStyle = { clipPath: 'polygon(0% 0%, calc(100% - 1.25rem) 0%, 100% 50%, calc(100% - 1.25rem) 100%, 0% 100%, 1.25rem 50%)' };
-        }
-
-        return (
-            <div
-                className={`flex items-center justify-start h-12 text-white font-semibold ${bgColor}`}
-                style={{ ...clipPathStyle, paddingLeft: isFirst || totalActiveSteps === 1 ? '1rem' : '2.25rem', paddingRight: isLast || totalActiveSteps === 1 ? '1rem' : '2.25rem' }}
-            >
-                <div className="flex items-center gap-2">
-                    <div className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-full bg-white/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                    <span className="text-center whitespace-nowrap">{step.name}</span>
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <section className="space-y-8">
-            <p className="text-base text-gray-700 dark:text-slate-300">
-                此儀表板整合了 {details.id} NPI 試產的關鍵資訊。您可以在此查看專案的總體概況、關鍵指標以及高階時程。使用上方的頁籤來深入了解特定的規格、製造流程或詳細的任務列表。
+        <section>
+            <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
+                請在此處定義專案的所有相關規格。您可以新增或刪除規格，並編輯其標題和細項。
             </p>
-            
-            {/* 1. Project Detail Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 card-print-grid">
-                <Card title="專案料號" className="print-card">
-                    <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
-                </Card>
-                <Card title="試產數量" className="print-card">
-                    <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
-                </Card>
-                <Card title="PCB 尺寸 (mm)" className="print-card">
-                    <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
-                </Card>
-                <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20 print-card">
-                    <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-xl font-semibold text-red-700 dark:text-red-500" />
-                </Card>
-            </div>
-            
-            {/* 2. Process Flow Diagram */}
-            <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col items-center">
-                <div className="flex flex-wrap items-center justify-center gap-2 py-4">
-                    {activeSteps.map((step, index) => (
-                        <ProcessFlowDiagramNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />
-                    ))}
-                </div>
-            </div>
-            
-            {/* 3. Specs and Schedule */}
-            <div className="flex flex-col lg:flex-row lg:space-x-6 space-y-6 lg:space-y-0 no-print">
-                {/* Left Column: Thinner Related Specs */}
-                <div className="lg:w-1/4 xl:w-1/5 flex-shrink-0">
-                    <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Related Specs</h3>
-                    <div className="space-y-4">
-                        {relatedSpecs.length > 0 ? relatedSpecs.map(spec => (
-                            <div 
-                                key={spec.id} 
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, spec.id)}
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, spec.id)}
-                                onDragEnd={handleDragEnd}
-                                className="bg-white dark:bg-slate-800/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 cursor-move transition-shadow"
-                            >
-                                <EditableField
-                                    as="h4"
-                                    initialValue={spec.title}
-                                    onSave={(newValue) => onSpecChange(spec.id, 'title', newValue)}
-                                    className="font-semibold text-amber-800 dark:text-amber-400"
-                                />
-                                <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700 dark:text-slate-300">
-                                    {Object.entries(spec.items || {}).map(([key, value]) => (
-                                        <li key={key} className="flex">
-                                            <EditableField
-                                              as="span"
-                                              initialValue={key}
-                                              onSave={(newKey) => onSpecItemKeyChange(spec.id, key, newKey)}
-                                              className="font-medium mr-1"
-                                            />:
-                                            <EditableField
-                                              as="span"
-                                              initialValue={value}
-                                              onSave={(newValue) => onSpecChange(spec.id, key, newValue)}
-                                              className="flex-grow ml-2"
-                                            />
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )) : (
-                           <div className="flex items-center justify-center h-48 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-gray-300 dark:border-slate-700">
-                             <p className="text-center text-gray-500 dark:text-slate-400 p-4">No specs are currently linked to active process steps.</p>
-                           </div>
-                        )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {specs.map((spec) => (
+                    <div key={spec.id} className="bg-white dark:bg-slate-800/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 relative group">
+                        <button onClick={() => onRemoveSpec(spec.id)} className="absolute top-2 right-2 p-1 rounded-full bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                        <EditableField 
+                            as="h3"
+                            initialValue={spec.title}
+                            onSave={(newTitle) => onSpecChange(spec.id, 'title', newTitle)}
+                            className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-3"
+                            inputClassName="text-lg font-semibold"
+                        />
+                        <ul className="space-y-2">
+                            {Object.entries(spec.items).map(([key, value]) => (
+                                <li key={key} className="flex text-sm">
+                                    <EditableField 
+                                        as="span"
+                                        initialValue={key}
+                                        onSave={(newKey) => onSpecChange(spec.id, 'itemKey', { oldKey: key, newKey })}
+                                        className="font-medium text-gray-600 dark:text-slate-400 w-2/5"
+                                        inputClassName="font-medium"
+                                    />
+                                    <span className="mx-2">:</span>
+                                    <EditableField 
+                                        as="span"
+                                        initialValue={value}
+                                        onSave={(newValue) => onSpecChange(spec.id, 'itemValue', { key, newValue })}
+                                        className="text-gray-800 dark:text-slate-200 w-3/5"
+                                    />
+                                </li>
+                            ))}
+                        </ul>
+                        <button onClick={() => onSpecChange(spec.id, 'addItem')} className="mt-4 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">+ Add Item</button>
                     </div>
-                </div>
-
-                {/* Right Column: Schedule Timeline */}
-                <div className="lg:w-3/4 xl:w-4/5">
-                    <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Schedule Timeline</h3>
-                    <div className="h-[65vh] bg-white dark:bg-slate-800/50 p-1 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
-                         <ScheduleTimelineView 
-                            tasks={scheduleTasks} 
-                            onTaskChange={onScheduleTaskChange}
-                            onTaskReorder={onReorderStep}
-                         />
-                    </div>
-                </div>
-            </div>
-
-            <div className="hidden print:block">
-                <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Related Specifications</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {relatedSpecs.map(spec => (
-                     <div key={`print-spec-${spec.id}`} className="bg-white dark:bg-slate-800/50 p-4 rounded-lg border border-amber-100 dark:border-slate-700 print:border-gray-300 print:break-inside-avoid">
-                         <h4 className="font-semibold text-amber-800 dark:text-amber-400">{spec.title}</h4>
-                         <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700 dark:text-slate-300">
-                             {Object.entries(spec.items || {}).map(([key, value]) => (
-                                 <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>
-                             ))}
-                         </ul>
-                     </div>
-                  ))}
-                </div>
-                
-                <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">{processFlowTitle}</h3>
-                <ol className="list-decimal list-inside space-y-2">
-                    {activeSteps.map(step => (
-                        <li key={`print-overview-step-${step.id}`}>
-                            <strong>{step.name}:</strong> 
-                            <span className="text-gray-600 ml-2">{step.details}</span>
-                        </li>
-                    ))}
-                </ol>
-                <div className="print-break-before-page">
-                    <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Detailed Schedule</h3>
-                    <SchedulePrintView tasks={scheduleTasks} />
-                </div>
+                ))}
+                <button onClick={onAddSpec} className="flex items-center justify-center p-4 border-2 border-dashed border-amber-300 dark:border-slate-600 rounded-lg text-amber-600 dark:text-slate-400 hover:bg-amber-100 dark:hover:bg-slate-700 transition-colors">
+                    + Add New Spec
+                </button>
             </div>
         </section>
     );
 };
 
 
-// --- From App.tsx ---
-const App = () => {
-  const { useState, useMemo, useEffect } = React;
+// --- From components/ProcessFlowTab.tsx ---
+const ProcessFlowTab = ({ steps, onStepChange, specs, onAddStep, onRemoveStep, onStepReorder }) => {
+    const { useState } = React;
+    const [dragOverIndex, setDragOverIndex] = useState(null);
 
-  const LOCAL_STORAGE_KEY = 'npi-meeting-board-state';
+    const handleDragStart = (e, index) => {
+        e.dataTransfer.setData('stepIndex', index);
+    };
 
-  const initialProjectDetails = { id: 'Enter Project ID', quantity: 0, pcbSize: '0 x 0 x 0 mm', targetShipDate: '' };
-  const initialSpecs = [
-    { id: 'spec-smt', title: 'SMT Spec', items: { 'Total units': 'Enter details here', 'Top side': 'Enter details here', 'Bottom side': 'Enter details here' } },
-    { id: 'spec-dip-manual', title: 'DIP Spec (manual)', items: { 'Relay pin': 'Enter details here', '手焊零件': 'New Value', '插件': 'New Value' } },
-    { id: 'spec-test', title: 'Test Spec', items: { 'Test time': 'Enter details here' } },
-    { id: 'spec-pcb', title: 'PCB Spec', items: { 'Layer Count': 'Enter value', 'Material': 'e.g., FR-4', 'Thickness': 'e.g., 1.6mm', 'Surface Finish': 'e.g., ENIG' } },
-    { id: 'spec-firmware', title: 'Firmware Spec', items: { 'Version': 'Enter version number', 'Flashing Method': 'e.g., JTAG, SWD' } },
-    { id: 'spec-mechanical', title: 'Mechanical Spec', items: { 'Enclosure Dimensions': 'L x W x H mm', 'Material': 'e.g., ABS, Aluminum', 'Finish': 'e.g., Matte, Anodized' } },
-    { id: 'spec-packaging', title: 'Packaging Spec', items: { 'Box Type': 'e.g., Corrugated', 'Labeling Standard': 'Enter details', 'Units per Box': 'Enter number' } },
-    { id: 'spec-quality', title: 'Quality & Inspection Spec', items: { 'AQL Level': 'e.g., 0.65', 'Cosmetic Standard': 'Reference document' } },
-    { id: 'spec-tooling', title: 'Tooling & Fixture Spec', items: { 'Test Fixture ID': 'Enter ID', 'Assembly Jig': 'Enter details', 'Stencil Thickness': 'e.g., 0.12mm' } },
-    { id: 'spec-regulatory', title: 'Regulatory Compliance', items: { 'RoHS': 'Compliant / Non-compliant', 'FCC / CE': 'Required / Not Required' } },
-    { id: 'spec-assembly', title: 'Assembly Spec', items: { 'torque': 'New Value', 'Assembly Jig': 'New Value' } },
-    { id: 'spec-dip-general', title: 'DIP Spec', items: {} }
-  ];
-  const initialProcessSteps = [
-    { id: 'step-bom', name: 'BOM 確認', details: 'Bill of Materials creation and finalization.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-receiving', name: '料到', details: 'Receiving and incoming inspection of all components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-pcb', name: 'PCB到', details: 'Receiving and incoming inspection of bare PCBs. (WITH SAMPLE?)', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-pcb' },
-    { id: 'step-smt', name: 'SMT', details: 'Surface Mount Technology assembly process.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-smt' },
-    { id: 'step-aoi', name: 'SMT 目檢', details: 'Visual inspection of SMT components and solder joints.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
-    { id: 'step-pressfit', name: '壓合', details: 'Press-fit component assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-assembly' },
-    { id: 'step-dip', name: '插件', details: 'Through-hole component insertion.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-general' },
-    { id: 'step-manual-solder', name: '手焊', details: 'Manual soldering of specific components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
-    { id: 'step-wash', name: '水洗', details: 'Washing, Cleaning PCBA to remove flux and contaminants.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-fw-flash', name: '燒錄', details: 'Firmware flashing and verification.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-firmware' },
-    { id: 'step-ict', name: '飛針', details: 'Fly Probe testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-tooling' },
-    { id: 'step-assy', name: '組裝', details: 'Final product assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-mechanical' },
-    { id: 'step-final-test', name: '成品測試', details: 'Final functional testing of the assembled product.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
-    { id: 'step-qc', name: 'QC', details: 'Final quality control inspection.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
-    { id: 'step-pack', name: '包裝', details: 'Packaging for shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-packaging' }
-  ];
-
-  const getInitialState = () => {
-    try {
-      const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (savedState) {
-        const parsed = JSON.parse(savedState);
-        
-        // Robust validation to prevent crashes from malformed localStorage data.
-        if (parsed && parsed.projectDetails && Array.isArray(parsed.specs) && Array.isArray(parsed.processSteps)) {
-            
-            // Sanitize specs: ensure each spec has an 'items' object property.
-            const sanitizedSpecs = parsed.specs.map(s => ({
-                ...s,
-                items: (s && s.items && typeof s.items === 'object' && !Array.isArray(s.items)) ? s.items : {}
-            }));
-            
-            return {
-                appTitle: parsed.appTitle || "NPI Meeting Board",
-                projectName: parsed.projectName || "New Project",
-                projectDetails: { ...initialProjectDetails, ...parsed.projectDetails },
-                specs: sanitizedSpecs,
-                processSteps: parsed.processSteps,
-                attendees: Array.isArray(parsed.attendees) ? parsed.attendees : [],
-                meetingDate: parsed.meetingDate || new Date().toISOString().slice(0, 10),
-            };
-        }
-      }
-    } catch (error) {
-      console.error("Failed to parse state from localStorage:", error);
-      // If parsing fails, we fall through to the default state.
-    }
+    const handleDragOver = (e, index) => {
+        e.preventDefault();
+        setDragOverIndex(index);
+    };
     
-    // Return default state if no valid saved state is found.
-    return {
-      appTitle: "NPI Meeting Board",
-      projectName: "New Project",
-      projectDetails: initialProjectDetails,
-      specs: initialSpecs,
-      processSteps: initialProcessSteps,
-      attendees: [],
-      meetingDate: new Date().toISOString().slice(0, 10),
+    const handleDrop = (e, targetIndex) => {
+        e.preventDefault();
+        const draggedIndex = parseInt(e.dataTransfer.getData('stepIndex'), 10);
+        setDragOverIndex(null);
+        if (draggedIndex !== targetIndex) {
+            onStepReorder(draggedIndex, targetIndex);
+        }
     };
-  };
-
-  const [appTitle, setAppTitle] = useState(getInitialState().appTitle);
-  const [projectName, setProjectName] = useState(getInitialState().projectName);
-  const [projectDetails, setProjectDetails] = useState(getInitialState().projectDetails);
-  const [specs, setSpecs] = useState(getInitialState().specs);
-  const [processSteps, setProcessSteps] = useState(getInitialState().processSteps);
-  const [activeTab, setActiveTab] = useState('Overview');
-  const [attendees, setAttendees] = useState(getInitialState().attendees);
-  const [meetingDate, setMeetingDate] = useState(getInitialState().meetingDate);
-  const [processFlowTitle, setProcessFlowTitle] = useState("Manufacturing Process Flow");
-
-
-  useEffect(() => {
-    const stateToSave = {
-      appTitle,
-      projectName,
-      projectDetails,
-      specs,
-      processSteps,
-      attendees,
-      meetingDate
+    
+    const getStepColor = (index, total) => {
+        if (index === 0) return 'bg-blue-500';
+        if (index === total -1) return 'bg-green-500';
+        const hue = 160;
+        const saturation = 100;
+        const lightness = 45 - (index / total) * 15;
+        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     };
-    try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stateToSave));
-    } catch (error) {
-        console.error("Failed to save state to localStorage:", error);
-    }
-  }, [appTitle, projectName, projectDetails, specs, processSteps, attendees, meetingDate]);
 
-  const handleReset = () => {
-    if (window.confirm("Are you sure you want to reset all data? This cannot be undone.")) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        setAppTitle("NPI Meeting Board");
-        setProjectName("New Project");
-        setProjectDetails(initialProjectDetails);
-        setSpecs(initialSpecs);
-        setProcessSteps(initialProcessSteps);
-        setAttendees([]);
-        setMeetingDate(new Date().toISOString().slice(0, 10));
-        setActiveTab('Overview');
-    }
-  };
-  
-  const handleSaveAsPdf = () => {
-    document.title = `${projectName}_${projectDetails.id}_NPI_Plan_${new Date().toISOString().slice(0,10)}`;
-    window.print();
-  };
-
-  const handleProjectDetailChange = (key, value) => {
-    setProjectDetails(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleSpecChange = (specId, itemKey, newValue) => {
-    setSpecs(prevSpecs => prevSpecs.map(spec => {
-      if (spec.id === specId) {
-        if (itemKey === 'title') {
-            return { ...spec, title: String(newValue) };
-        }
-        return { ...spec, items: { ...spec.items, [itemKey]: newValue } };
-      }
-      return spec;
-    }));
-  };
-  
-  const handleAddSpecItem = (specId) => {
-    let newKey = 'New Parameter';
-    let counter = 1;
-    const existingKeys = specs.find(s => s.id === specId)?.items || {};
-    while (Object.keys(existingKeys).includes(newKey)) {
-        newKey = `New Parameter ${counter++}`;
-    }
-    handleSpecChange(specId, newKey, 'Enter value');
-  };
-
-  const handleDeleteSpecItem = (specId, itemKey) => {
-    setSpecs(prevSpecs => prevSpecs.map(spec => {
-        if (spec.id === specId) {
-            const newItems = { ...spec.items };
-            delete newItems[itemKey];
-            return { ...spec, items: newItems };
-        }
-        return spec;
-    }));
-  };
-
-  const handleSpecItemKeyChange = (specId, oldKey, newKey) => {
-    if (!newKey || oldKey === newKey) return;
-    setSpecs(prevSpecs => prevSpecs.map(spec => {
-        if (spec.id === specId) {
-            const itemsArray = Object.entries(spec.items);
-            const itemIndex = itemsArray.findIndex(([k, v]) => k === oldKey);
-            if (itemIndex > -1) {
-                itemsArray[itemIndex][0] = newKey;
-                const newItems = Object.fromEntries(itemsArray);
-                return { ...spec, items: newItems };
-            }
-        }
-        return spec;
-    }));
-  };
-
-  const handleAddSpec = () => {
-    const newSpec = {
-        id: `spec-${Date.now()}`,
-        title: 'New Specification',
-        items: { 'Parameter 1': 'Value 1' }
-    };
-    setSpecs(prev => [...prev, newSpec]);
-  };
-  
-  const handleDeleteSpec = (specId) => {
-    // Also unlink from any process steps
-    setProcessSteps(prev => prev.map(step => 
-      step.relatedSpecId === specId ? { ...step, relatedSpecId: null } : step
-    ));
-    setSpecs(prev => prev.filter(s => s.id !== specId));
-  };
-
-  const handleProcessStepChange = (stepId, key, value) => {
-    setProcessSteps(prev => prev.map(step => 
-      step.id === stepId ? { ...step, [key]: value } : step
-    ));
-  };
-  
-  const handleBulkStepDateChange = (stepIds, key, value) => {
-    setProcessSteps(prev => prev.map(step => 
-        stepIds.includes(step.id) ? { ...step, [key]: value } : step
-    ));
-  };
-  
-  const handleToggleStep = (stepId) => {
-    setProcessSteps(prev => prev.map(step => 
-      step.id === stepId ? { ...step, isActive: !step.isActive } : step
-    ));
-  };
-  
-  const handleAddStep = () => {
-    const newStep = {
-        id: `step-${Date.now()}`,
-        name: 'New Step',
-        details: '',
-        type: 'process',
-        isActive: true,
-        startDate: '',
-        endDate: '',
-        relatedSpecId: null
-    };
-    const activeSteps = processSteps.filter(s => s.isActive);
-    const inactiveSteps = processSteps.filter(s => !s.isActive);
-    setProcessSteps([...activeSteps, newStep, ...inactiveSteps]);
-  };
-  
-  const handleDeleteStep = (stepId) => {
-    setProcessSteps(prev => prev.filter(s => s.id !== stepId));
-  };
-  
-  const handleReorderSteps = (reorderedStepsWithInactive) => {
-    setProcessSteps(reorderedStepsWithInactive);
-  };
-  
-  const handleReorderSpecs = (newSpecs) => {
-    setSpecs(newSpecs);
-  };
-
-  const handleLinkStepToSpec = (stepId, specId) => {
-     handleProcessStepChange(stepId, 'relatedSpecId', specId);
-  };
-
-  const handleAttendeesChange = (value) => {
-    setAttendees(value.split('\n'));
-  };
-
-  const formatToDateTimeLocal = (date) => {
-    if (!(date instanceof Date) || isNaN(date)) return '';
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  const handleScheduleTaskChange = (taskId, field, value) => {
-    const stepId = taskId.substring(0, taskId.lastIndexOf('-'));
-    const stepToUpdate = processSteps.find(s => s.id === stepId);
-    if (!stepToUpdate) return;
-
-    if (field === 'name') {
-        handleProcessStepChange(stepId, 'name', value);
-    } else if (field === 'time') {
-        const timeParts = value.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-        if (timeParts && timeParts.length === 3) {
-            const [_, startTimeStr, endTimeStr] = timeParts;
-            const [startHour, startMin] = startTimeStr.split(':').map(Number);
-            const [endHour, endMin] = endTimeStr.split(':').map(Number);
-
-            const newStartDate = new Date(stepToUpdate.startDate);
-            newStartDate.setHours(startHour, startMin);
-
-            const newEndDate = new Date(stepToUpdate.endDate);
-            // If end time is earlier than start time, assume it's the next day
-            if (newEndDate.getTime() < newStartDate.getTime()) {
-                newEndDate.setDate(newEndDate.getDate() + 1);
-            }
-            newEndDate.setHours(endHour, endMin);
-
-            handleBulkStepDateChange([stepId], 'startDate', formatToDateTimeLocal(newStartDate));
-            handleBulkStepDateChange([stepId], 'endDate', formatToDateTimeLocal(newEndDate));
-        }
-    }
-  };
-
-  const handleReorderProcessStep = (draggedStepId, targetStepId, newDateStr) => {
-      if (!draggedStepId) return;
-
-      setProcessSteps(prevSteps => {
-          let allSteps = [...prevSteps];
-          const draggedStepOriginal = allSteps.find(s => s.id === draggedStepId);
-          if (!draggedStepOriginal) return prevSteps;
-
-          // 1. Create a mutable, updated version of the step with its new date
-          const updatedDraggedStep = { ...draggedStepOriginal };
-          if (newDateStr) {
-              try {
-                  const oldStartDate = new Date(draggedStepOriginal.startDate || Date.now());
-                  const oldEndDate = new Date(draggedStepOriginal.endDate || Date.now());
-                  const duration = oldEndDate.getTime() - oldStartDate.getTime();
-
-                  const newStartDate = new Date(`${newDateStr}T00:00:00`);
-                  newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
-                  
-                  const newEndDate = new Date(newStartDate.getTime() + duration);
-
-                  updatedDraggedStep.startDate = formatToDateTimeLocal(newStartDate);
-                  updatedDraggedStep.endDate = formatToDateTimeLocal(newEndDate);
-              } catch (e) {
-                  console.error("Error calculating new date for dragged step:", e);
-                  return prevSteps; // Abort on date error
-              }
-          }
-          
-          // Temporarily update the step in the main array to have its new date for sorting
-          allSteps = allSteps.map(s => s.id === draggedStepId ? updatedDraggedStep : s);
-          
-          // 2. Separate active and inactive steps for reordering
-          let activeSteps = allSteps.filter(s => s.isActive);
-          const inactiveSteps = allSteps.filter(s => !s.isActive);
-          
-          // 3. Re-sort all active steps chronologically. This is the simplest and most reliable
-          //    way to ensure the process flow always matches the schedule's visual order.
-          activeSteps.sort((a, b) => {
-              const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-              const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-              if (dateA !== dateB) return dateA - dateB;
-              
-              // Fallback for items on the same day (should be rare, but good for stability)
-              return 0; 
-          });
-          
-          return [...activeSteps, ...inactiveSteps];
-      });
-  };
-
-  const scheduleTasks = useMemo(() => {
-    return processSteps
-      .filter(step => step.isActive && step.startDate && step.endDate)
-      .flatMap(step => {
-          const tasks = [];
-          const start = new Date(step.startDate);
-          const end = new Date(step.endDate);
-          
-          if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return [];
-
-          let iterDate = new Date(start);
-          iterDate.setHours(0, 0, 0, 0);
-
-          const relatedSpec = step.relatedSpecId ? specs.find(s => s.id === step.relatedSpecId) : null;
-
-          while (iterDate <= end) {
-              const year = iterDate.getFullYear();
-              const month = (iterDate.getMonth() + 1).toString().padStart(2, '0');
-              const day = iterDate.getDate().toString().padStart(2, '0');
-              const dateStr = `${year}-${month}-${day}`;
-              
-              const dayOfWeek = iterDate.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週','');
-              
-              const startDay = new Date(start);
-              startDay.setHours(0, 0, 0, 0);
-              const isFirstDay = iterDate.getTime() === startDay.getTime();
-
-              const endDay = new Date(end);
-              endDay.setHours(0, 0, 0, 0);
-              const isLastDay = iterDate.getTime() === endDay.getTime();
-              const isMultiDay = startDay.getTime() !== endDay.getTime();
-              
-              const startTime = isFirstDay ? start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '00:00';
-              const endTime = isLastDay ? end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '23:59';
-              
-              let notes = `${step.details} (${startTime} - ${endTime})`;
-              if (relatedSpec) {
-                const specDetails = Object.entries(relatedSpec.items || {}).map(([k,v]) => `${k}: ${v}`).join('; ');
-                notes += ` | Spec: ${relatedSpec.title || ''}`;
-              }
-
-              tasks.push({
-                  id: `${step.id}-${dateStr}`,
-                  stepId: step.id,
-                  date: dateStr,
-                  day: dayOfWeek,
-                  task: step.name,
-                  notes: notes,
-                  startTime,
-                  endTime,
-                  isMultiDay,
-                  ganttGroup: step.name,
-                  relatedSpec: relatedSpec,
-              });
-
-              iterDate.setDate(iterDate.getDate() + 1);
-          }
-          return tasks;
-      })
-      .sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) {
-            return dateA - dateB;
-        }
-        const indexA = processSteps.findIndex(p => p.id === a.stepId);
-        const indexB = processSteps.findIndex(p => p.id === b.stepId);
-        return indexA - indexB;
-      });
-  }, [processSteps, specs]);
-
-  const tabs = ['Overview', 'Specs', 'Process Flow', 'Attendees'];
-  
-  return (
-    <div className="mx-auto p-4 md:p-8 print-container">
-        <Header 
-            appTitle={appTitle}
-            onAppTitleChange={setAppTitle}
-            projectName={projectName} 
-            onProjectNameChange={setProjectName} 
-            onSaveAsPdf={handleSaveAsPdf}
-            onReset={handleReset}
-        />
-        <main>
-          <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
-          <div className="tab-content mt-6">
-            <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
-                <OverviewTab 
-                    details={projectDetails}
-                    onDetailChange={handleProjectDetailChange}
-                    specs={specs}
-                    processSteps={processSteps}
-                    onReorderSpecs={handleReorderSpecs}
-                    processFlowTitle={processFlowTitle}
-                    scheduleTasks={scheduleTasks}
-                    onScheduleTaskChange={handleScheduleTaskChange}
-                    onReorderStep={handleReorderProcessStep}
-                    onSpecChange={handleSpecChange}
-                    onSpecItemKeyChange={handleSpecItemKeyChange}
-                />
+    return (
+        <section>
+            <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
+                拖曳步驟以重新排序流程。點擊編輯名稱、日期和關聯規格。
+            </p>
+            {/* Process Flow Visual */}
+            <div className="flex flex-wrap items-center justify-center gap-y-2 mb-10 overflow-x-auto pb-4">
+                {steps.map((step, index) => (
+                    <div key={step.id} className="flex items-center">
+                        <div 
+                            className="flex items-center justify-center text-white font-medium text-sm px-4 py-2"
+                            style={{ 
+                                backgroundColor: getStepColor(index, steps.length),
+                                clipPath: 'polygon(0% 0%, 85% 0, 100% 50%, 85% 100%, 0% 100%)'
+                            }}
+                        >
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                           <span>{step.name}</span>
+                        </div>
+                        {index < steps.length - 1 && <div className="-ml-4 w-4 h-full" style={{backgroundColor: getStepColor(index + 1, steps.length)}}></div>}
+                    </div>
+                ))}
+                 <button onClick={onAddStep} className="flex items-center justify-center text-green-700 font-medium text-sm px-4 py-2 rounded-md border-2 border-dashed border-green-300 dark:border-green-600 hover:bg-green-50 dark:hover:bg-green-900/50 transition-colors ml-2">
+                    Add Step +
+                </button>
             </div>
-            <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
-              <TabContentWrapper title="技術規格 (Specifications)">
-                <SpecsTab 
-                    specs={specs} 
-                    onSpecChange={handleSpecChange}
-                    onAddSpec={handleAddSpec}
-                    onDeleteSpec={handleDeleteSpec}
-                    onAddSpecItem={handleAddSpecItem}
-                    onDeleteSpecItem={handleDeleteSpecItem}
-                    onSpecItemKeyChange={handleSpecItemKeyChange}
-                    onReorderSpecs={handleReorderSpecs}
-                />
-              </TabContentWrapper>
+            {/* Process Steps Details */}
+            <div className="space-y-4">
+                {steps.map((step, index) => (
+                    <div 
+                        key={step.id} 
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragLeave={() => setDragOverIndex(null)}
+                        onDrop={(e) => handleDrop(e, index)}
+                        className={`p-4 bg-white dark:bg-slate-800/50 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 grid grid-cols-1 md:grid-cols-10 gap-4 items-center transition-all duration-200 ${dragOverIndex === index ? 'ring-2 ring-blue-500 scale-105' : ''}`}>
+                        <div className="md:col-span-2 flex items-center">
+                           <span className="text-gray-400 dark:text-slate-500 mr-4 cursor-move" title="Drag to reorder">☰</span>
+                           <EditableField 
+                                as="span"
+                                initialValue={step.name}
+                                onSave={(newName) => onStepChange(step.id, 'name', newName)}
+                                className="font-semibold text-amber-900 dark:text-amber-400"
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="text-xs text-gray-500 dark:text-slate-400">Start Date</label>
+                            <EditableField 
+                                type="date"
+                                initialValue={formatDateToISO(step.startDate)}
+                                onSave={(newDate) => onStepChange(step.id, 'startDate', newDate)}
+                                className="block w-full"
+                            />
+                        </div>
+                         <div className="md:col-span-2">
+                            <label className="text-xs text-gray-500 dark:text-slate-400">End Date</label>
+                             <EditableField 
+                                type="date"
+                                initialValue={formatDateToISO(step.endDate)}
+                                onSave={(newDate) => onStepChange(step.id, 'endDate', newDate)}
+                                className="block w-full"
+                            />
+                        </div>
+                        <div className="md:col-span-3">
+                             <label className="text-xs text-gray-500 dark:text-slate-400">Related Spec</label>
+                             <select
+                                value={step.relatedSpecId || ''}
+                                onChange={(e) => onStepChange(step.id, 'relatedSpecId', e.target.value)}
+                                className="block w-full p-1 border rounded-md bg-amber-50 dark:bg-slate-700 border-amber-200 dark:border-slate-600 text-sm focus:ring-amber-500 focus:border-amber-500"
+                            >
+                                <option value="">None</option>
+                                {specs.map(spec => <option key={spec.id} value={spec.id}>{spec.title}</option>)}
+                             </select>
+                        </div>
+                        <div className="md:col-span-1 text-right">
+                           <button onClick={() => onRemoveStep(step.id)} className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400" title="Remove Step">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                           </button>
+                        </div>
+                    </div>
+                ))}
             </div>
-             <div className={activeTab !== 'Process Flow' ? 'hidden' : ''}>
-                <TabContentWrapper title="製程與流程 (Process Flow)">
-                    <ProcessFlowTab 
-                        steps={processSteps}
-                        specs={specs}
-                        projectId={projectDetails.id}
-                        title={processFlowTitle}
-                        onTitleChange={setProcessFlowTitle}
-                        onStepChange={handleProcessStepChange}
-                        onBulkStepDateChange={handleBulkStepDateChange}
-                        onAddStep={handleAddStep}
-                        onDeleteStep={handleDeleteStep}
-                        onToggleStep={handleToggleStep}
-                        onReorderSteps={handleReorderSteps}
-                        onLinkStepToSpec={handleLinkStepToSpec}
-                    />
-                </TabContentWrapper>
-             </div>
-             <div className={activeTab !== 'Attendees' ? 'hidden' : ''}>
-                 <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
-                    <AttendeesTab 
-                        attendees={attendees} 
-                        onAttendeesChange={handleAttendeesChange} 
-                        date={meetingDate}
-                        onDateChange={setMeetingDate}
-                    />
-                </TabContentWrapper>
-             </div>
-          </div>
-          
-          <div className="hidden print:block space-y-12">
-            <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
-                <OverviewTab 
-                    details={projectDetails} 
-                    onDetailChange={handleProjectDetailChange} 
-                    specs={specs} 
-                    processSteps={processSteps} 
-                    onReorderSpecs={() => {}} 
-                    processFlowTitle={processFlowTitle}
-                    scheduleTasks={scheduleTasks}
-                    onScheduleTaskChange={() => {}}
-                    onReorderStep={() => {}}
-                    onSpecChange={() => {}}
-                    onSpecItemKeyChange={() => {}}
-                />
-            </TabContentWrapper>
-            <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
-                <AttendeesTab attendees={attendees} onAttendeesChange={() => {}} date={meetingDate} onDateChange={() => {}} />
-            </TabContentWrapper>
-            <TabContentWrapper title="技術規格 (Specifications)">
-                <SpecsTab specs={specs} onSpecChange={() => {}} onAddSpec={() => {}} onDeleteSpec={() => {}} onAddSpecItem={() => {}} onDeleteSpecItem={() => {}} onSpecItemKeyChange={() => {}} onReorderSpecs={() => {}} />
-            </TabContentWrapper>
-             <TabContentWrapper title="時程與任務 (Schedule)">
-                 <SchedulePrintView tasks={scheduleTasks} />
-             </TabContentWrapper>
-            <TabContentWrapper title="製程與流程 (Process Flow)">
-                <div className="text-center font-bold text-lg mb-4">{processFlowTitle}</div>
-                {/* Simplified Print View for Process Flow */}
-                <ol className="list-decimal list-inside space-y-2">
-                    {processSteps.filter(s => s.isActive).map(step => (
-                        <li key={`print-step-${step.id}`}>
-                            <strong>{step.name}:</strong> 
-                            <span className="text-gray-600 ml-2">{step.details}</span>
-                            {step.startDate && <span className="text-sm text-gray-500 ml-2">({step.startDate.replace('T', ' ')} - {step.endDate.replace('T', ' ')})</span>}
-                        </li>
-                    ))}
-                </ol>
-            </TabContentWrapper>
-          </div>
-        </main>
-    </div>
-  );
+        </section>
+    );
 };
 
+// --- App Component ---
+const App = () => {
+    const { useState, useEffect, useMemo, useCallback } = React;
+    
+    // --- State ---
+    const [appTitle, setAppTitle] = useState('NPI Meeting Board');
+    const [projectName, setProjectName] = useState('New Project');
+    const [projectDetails, setProjectDetails] = useState({
+        id: 'Enter Project ID',
+        quantity: 0,
+        pcbSize: '0 x 0 mm',
+        targetShipDate: 'n/a'
+    });
+    const [specs, setSpecs] = useState([]);
+    const [processSteps, setProcessSteps] = useState([]);
+    const [attendees, setAttendees] = useState([]);
+    const [meetingDate, setMeetingDate] = useState(new Date().toISOString().slice(0, 10));
+    const [activeTab, setActiveTab] = useState('Overview');
+    
+    const initialData = {
+        appTitle: 'NPI Meeting Board',
+        projectName: 'My Awesome Project',
+        projectDetails: { id: 'A301-202511', quantity: 5000, pcbSize: '120 x 80 mm', targetShipDate: '2025-11-28' },
+        specs: [
+            { id: 'spec1', title: 'SMT Spec', items: { '共零件數': 2868, '正面': 18, '背面': 2850 } },
+            { id: 'spec2', title: 'DIP Spec (manual)', items: { 'Relay pin': 5064, '手焊零件': 8, '插件': 768 } },
+            { id: 'spec3', title: 'PCB Spec', items: { 'Layer Count': 8, 'Material': 'e.g. FR-4', 'Thickness': 'e.g. 1.6mm', 'Surface Finish': 'e.g. ENIG' } },
+            { id: 'spec4', title: 'Packaging Spec', items: { 'Box Type': 'e.g. Corrugated', 'Labeling Standard': 'enter details', 'Units per Box': 'enter number' } }
+        ],
+        processSteps: [
+            { id: 'step1', name: '建BOM', details: '', type: 'process', isActive: true, startDate: '2025-11-06', endDate: '2025-11-06', relatedSpecId: 'spec1' },
+            { id: 'step2', name: '料到', details: '', type: 'process', isActive: true, startDate: '2025-11-10', endDate: '2025-11-10', relatedSpecId: null },
+            { id: 'step3', name: 'PCB到', details: '', type: 'process', isActive: true, startDate: '2025-11-10', endDate: '2025-11-10', relatedSpecId: 'spec3' },
+            { id: 'step4', name: 'SMT', details: '', type: 'process', isActive: true, startDate: '2025-11-11', endDate: '2025-11-11', relatedSpecId: 'spec1' },
+            { id: 'step5', name: '組合', details: '', type: 'process', isActive: true, startDate: '2025-11-12', endDate: '2025-11-12', relatedSpecId: null },
+            { id: 'step6', name: '手焊', details: '', type: 'process', isActive: true, startDate: '2025-11-12', endDate: '2025-11-12', relatedSpecId: 'spec2' },
+            { id: 'step7', name: '水洗', details: '', type: 'process', isActive: true, startDate: '2025-11-13', endDate: '2025-11-13', relatedSpecId: null },
+            { id: 'step8', name: '插件', details: '', type: 'process', isActive: true, startDate: '2025-11-13', endDate: '2025-11-13', relatedSpecId: 'spec2' },
+            { id: 'step9', name: 'SMT目檢', details: '', type: 'qc', isActive: true, startDate: '2025-11-14', endDate: '2025-11-14', relatedSpecId: null },
+            { id: 'step10', name: '飛針', details: '', type: 'test', isActive: true, startDate: '2025-11-15', endDate: '2025-11-15', relatedSpecId: null },
+            { id: 'step11', name: 'QC', details: '', type: 'qc', isActive: true, startDate: '2025-11-16', endDate: '2025-11-16', relatedSpecId: null },
+            { id: 'step12', name: '包裝', details: '', type: 'pack', isActive: true, startDate: '2025-11-23', endDate: '2025-11-23', relatedSpecId: 'spec4' }
+        ],
+        attendees: ['John Doe (Project Manager)', 'Jane Smith (Engineer)', 'Peter Jones (QA)'],
+        meetingDate: '2025-11-01'
+    };
+    
+    const LOCAL_STORAGE_KEY = 'npi-meeting-board-data';
+
+    useEffect(() => {
+        try {
+            const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                setAppTitle(data.appTitle);
+                setProjectName(data.projectName);
+                setProjectDetails(data.projectDetails);
+                setSpecs(data.specs);
+                setProcessSteps(data.processSteps);
+                setAttendees(data.attendees);
+                setMeetingDate(data.meetingDate);
+            } else {
+                 handleReset(true); // Load initial data if nothing is saved
+            }
+        } catch (error) {
+            console.error("Failed to load data from localStorage", error);
+            handleReset(true);
+        }
+    }, []);
+
+    useEffect(() => {
+        const dataToSave = JSON.stringify({
+            appTitle,
+            projectName,
+            projectDetails,
+            specs,
+            processSteps,
+            attendees,
+            meetingDate
+        });
+        localStorage.setItem(LOCAL_STORAGE_KEY, dataToSave);
+    }, [appTitle, projectName, projectDetails, specs, processSteps, attendees, meetingDate]);
+
+    const handleReset = (isInitialLoad = false) => {
+        const confirmed = isInitialLoad || window.confirm("Are you sure you want to reset all data to the default sample? This cannot be undone.");
+        if (confirmed) {
+            setAppTitle(initialData.appTitle);
+            setProjectName(initialData.projectName);
+            setProjectDetails(initialData.projectDetails);
+            setSpecs(initialData.specs);
+            setProcessSteps(initialData.processSteps);
+            setAttendees(initialData.attendees);
+            setMeetingDate(initialData.meetingDate);
+        }
+    };
+    
+    // --- Handlers ---
+    const handleProjectDetailChange = (key, value) => {
+        setProjectDetails(prev => ({ ...prev, [key]: value }));
+    };
+    
+    const handleSpecChange = (id, field, data) => {
+        setSpecs(prevSpecs => prevSpecs.map(spec => {
+            if (spec.id === id) {
+                if (field === 'title') {
+                    return { ...spec, title: data };
+                }
+                if (field === 'itemKey') {
+                    const newItems = { ...spec.items };
+                    const value = newItems[data.oldKey];
+                    delete newItems[data.oldKey];
+                    newItems[data.newKey] = value;
+                    return { ...spec, items: newItems };
+                }
+                if (field === 'itemValue') {
+                    return { ...spec, items: { ...spec.items, [data.key]: data.newValue } };
+                }
+                if (field === 'addItem') {
+                    const newKey = `New Item ${Object.keys(spec.items).length + 1}`;
+                    return { ...spec, items: { ...spec.items, [newKey]: 'value' } };
+                }
+            }
+            return spec;
+        }));
+    };
+    
+    const handleAddSpec = () => {
+        setSpecs(prev => [...prev, {
+            id: `spec${Date.now()}`,
+            title: 'New Spec',
+            items: { 'Parameter': 'Value' }
+        }]);
+    };
+    
+    const handleRemoveSpec = (id) => {
+        setSpecs(prev => prev.filter(spec => spec.id !== id));
+        setProcessSteps(prev => prev.map(step => step.relatedSpecId === id ? { ...step, relatedSpecId: null } : step));
+    };
+
+    const handleStepChange = (id, field, value) => {
+        setProcessSteps(prev => prev.map(step =>
+            step.id === id ? { ...step, [field]: value } : step
+        ));
+    };
+    
+    const handleAddStep = () => {
+        const newStep = {
+            id: `step${Date.now()}`,
+            name: 'New Step',
+            details: '',
+            type: 'process',
+            isActive: true,
+            startDate: new Date().toISOString().slice(0, 10),
+            endDate: new Date().toISOString().slice(0, 10),
+            relatedSpecId: null
+        };
+        setProcessSteps(prev => [...prev, newStep]);
+    };
+    
+    const handleRemoveStep = (id) => {
+        setProcessSteps(prev => prev.filter(step => step.id !== id));
+    };
+
+    const handleStepReorder = (draggedIndex, targetIndex) => {
+        setProcessSteps(prevSteps => {
+            const newSteps = [...prevSteps];
+            const [draggedItem] = newSteps.splice(draggedIndex, 1);
+            newSteps.splice(targetIndex, 0, draggedItem);
+            return newSteps;
+        });
+    };
+    
+    const handleTaskChange = (stepId, field, value) => {
+        setProcessSteps(prevSteps => prevSteps.map(step => {
+            if (step.id === stepId) {
+                if (field === 'name') {
+                    return { ...step, name: value };
+                }
+                if (field === 'time') {
+                    const newStartTime = value.startTime || '00:00';
+                    const newEndTime = value.endTime || '23:59';
+                    // Complex time updates would go here if needed
+                    return step; // For now, this is a placeholder as time is derived
+                }
+            }
+            return step;
+        }));
+    };
+
+    const handleTaskReorder = useCallback((draggedStepId, targetStepId, targetDate, dropPosition) => {
+        setProcessSteps(prevSteps => {
+            const steps = [...prevSteps];
+            const draggedIndex = steps.findIndex(s => s.id === draggedStepId);
+            if (draggedIndex === -1) return prevSteps;
+
+            const [draggedStep] = steps.splice(draggedIndex, 1);
+            
+            // Update the date of the moved step
+            draggedStep.startDate = targetDate;
+            draggedStep.endDate = targetDate; // Assuming single day events
+
+            let targetIndex;
+            if (targetStepId) {
+                targetIndex = steps.findIndex(s => s.id === targetStepId);
+                // Adjust index based on dropping above or below
+                if (dropPosition === 'bottom') {
+                    targetIndex += 1;
+                }
+            } else {
+                // Find chronological insert point if no target or dropped on column
+                targetIndex = steps.findIndex(s => new Date(s.startDate) > new Date(targetDate));
+                if (targetIndex === -1) targetIndex = steps.length;
+            }
+
+            steps.splice(targetIndex, 0, draggedStep);
+
+            // Re-sort the entire array chronologically to fix the sequence
+            return steps.sort((a, b) => {
+                const dateA = new Date(a.startDate || '9999-12-31');
+                const dateB = new Date(b.startDate || '9999-12-31');
+                if (dateA - dateB !== 0) return dateA - dateB;
+                // If dates are the same, we can't know the order, but this is handled by the splice above.
+                // The sort just guarantees calendar order.
+                return 0;
+            });
+        });
+    }, []);
+
+    const scheduleTasks = useMemo(() => {
+        return processSteps
+            .filter(step => step.startDate)
+            .map(step => ({
+                id: step.id,
+                stepId: step.id,
+                date: formatDateToISO(step.startDate),
+                task: step.name,
+                startTime: '00:00', // These could be enhanced later
+                endTime: '23:59',
+                relatedSpec: specs.find(s => s.id === step.relatedSpecId)
+            }))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+    }, [processSteps, specs]);
+
+    const activeRelatedSpecs = useMemo(() => {
+      const activeSpecIds = new Set(processSteps.map(step => step.relatedSpecId).filter(Boolean));
+      return specs.filter(spec => activeSpecIds.has(spec.id));
+    }, [processSteps, specs]);
+
+    const handleSaveAsPdf = () => {
+        window.print();
+    };
+    
+    const tabs = ['Overview', 'Specs', 'Process Flow', 'Attendees'];
+    
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'Specs':
+                return <SpecsTab specs={specs} onSpecChange={handleSpecChange} onAddSpec={handleAddSpec} onRemoveSpec={handleRemoveSpec} />;
+            case 'Process Flow':
+                return <ProcessFlowTab steps={processSteps} onStepChange={handleStepChange} specs={specs} onAddStep={handleAddStep} onRemoveStep={handleRemoveStep} onStepReorder={handleStepReorder} />;
+            case 'Attendees':
+                return <AttendeesTab attendees={attendees} onAttendeesChange={(val) => setAttendees(val.split('\n'))} date={meetingDate} onDateChange={setMeetingDate} />;
+            case 'Overview':
+            default:
+                return (
+                    <div>
+                        {/* Project Details Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                           <Card title="專案 ID"><EditableField initialValue={projectDetails.id} onSave={(val) => handleProjectDetailChange('id', val)} className="text-xl font-semibold" /></Card>
+                           <Card title="總訂單量"><EditableField initialValue={projectDetails.quantity} onSave={(val) => handleProjectDetailChange('quantity', parseInt(val, 10) || 0)} className="text-xl font-semibold" /> pcs</Card>
+                           <Card title="PCB尺寸(mm)"><EditableField initialValue={projectDetails.pcbSize} onSave={(val) => handleProjectDetailChange('pcbSize', val)} className="text-xl font-semibold" /></Card>
+                           <Card title="目標出貨日"><EditableField type="date" initialValue={projectDetails.targetShipDate} onSave={(val) => handleProjectDetailChange('targetShipDate', val)} className="text-xl font-semibold" /></Card>
+                        </div>
+                         {/* Process Flow Visual */}
+                         <div className="flex flex-wrap items-center justify-center gap-y-2 mb-10 overflow-x-auto pb-4">
+                            {processSteps.map((step, index) => (
+                                <div key={step.id} className="flex items-center">
+                                    <div 
+                                        className="flex items-center justify-center text-white font-medium text-sm px-4 py-2"
+                                        style={{ 
+                                            backgroundColor: index === 0 ? '#3B82F6' : (index === processSteps.length -1 ? '#22C55E' : '#14B8A6'),
+                                            clipPath: 'polygon(0% 0%, 85% 0, 100% 50%, 85% 100%, 0% 100%)'
+                                        }}
+                                    >
+                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                       <span>{step.name}</span>
+                                    </div>
+                                    {index < processSteps.length - 1 && <div className="-ml-4 w-4 h-full" style={{backgroundColor: '#14B8A6'}}></div>}
+                                </div>
+                            ))}
+                        </div>
+                        {/* Main Content */}
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                            {/* Related Specs */}
+                            <div className="lg:col-span-1 space-y-4">
+                               <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-400">Related Specs</h3>
+                               {activeRelatedSpecs.length > 0 ? activeRelatedSpecs.map(spec => (
+                                   <div key={spec.id} className="bg-white dark:bg-slate-800/50 p-3 rounded-lg shadow-sm border border-amber-100 dark:border-slate-700">
+                                       <EditableField as="h4" initialValue={spec.title} onSave={(val) => handleSpecChange(spec.id, 'title', val)} className="font-semibold text-amber-900 dark:text-amber-400 mb-2 text-sm" />
+                                       <ul className="space-y-1">
+                                           {Object.entries(spec.items).map(([key, value]) => (
+                                               <li key={key} className="flex text-xs">
+                                                   <EditableField as="span" initialValue={key} onSave={(newKey) => handleSpecChange(spec.id, 'itemKey', { oldKey: key, newKey })} className="font-medium text-gray-500 dark:text-slate-400 w-2/5 truncate" />
+                                                   <span className="mx-1">:</span>
+                                                   <EditableField as="span" initialValue={value} onSave={(newValue) => handleSpecChange(spec.id, 'itemValue', { key, newValue })} className="text-gray-700 dark:text-slate-300 w-3/5" />
+                                               </li>
+                                           ))}
+                                       </ul>
+                                   </div>
+                               )) : <p className="text-sm text-gray-500 dark:text-slate-400">No specs are currently linked to any process steps.</p>}
+                            </div>
+                            {/* Schedule Timeline */}
+                            <div className="lg:col-span-3">
+                                <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-400 mb-4">Schedule Timeline</h3>
+                                <ScheduleTimelineView tasks={scheduleTasks} onTaskChange={handleTaskChange} onTaskReorder={handleTaskReorder} />
+                            </div>
+                        </div>
+                    </div>
+                );
+        }
+    };
+    
+    // --- Print Layout ---
+    const PrintLayout = () => (
+        <div className="hidden print:block">
+            {/* Page 1: Overview */}
+            <div className="print-container">
+                 <TabContentWrapper title="Overview" isFirstPrintSection={true}>
+                    {renderTabContent('Overview')}
+                 </TabContentWrapper>
+            </div>
+            {/* Page 2: Attendees */}
+            <div className="print-container">
+                <TabContentWrapper title="Attendees">
+                    <AttendeesTab attendees={attendees} onAttendeesChange={(val) => setAttendees(val.split('\n'))} date={meetingDate} onDateChange={setMeetingDate} />
+                </TabContentWrapper>
+            </div>
+        </div>
+    );
+    
+
+    return (
+        <React.Fragment>
+            <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+                <Header 
+                    appTitle={appTitle} onAppTitleChange={setAppTitle}
+                    projectName={projectName} onProjectNameChange={setProjectName} 
+                    onSaveAsPdf={handleSaveAsPdf}
+                    onReset={handleReset}
+                />
+                <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
+                <div className="mt-6">
+                    {renderTabContent()}
+                </div>
+            </main>
+            <PrintLayout />
+        </React.Fragment>
+    );
+};
+
+// --- Render App ---
 const container = document.getElementById('root');
 const root = ReactDOM.createRoot(container);
 root.render(<App />);
 
+// --- PWA Service Worker Registration ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(registration => {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      })
+      .catch(err => {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+  });
+}
     </script>
 </body>
 </html>
