@@ -131,6 +131,9 @@ interface ScheduleTask {
   day: string;
   task: string;
   notes: string;
+  startTime: string;
+  endTime: string;
+  isMultiDay: boolean;
   highlight?: string;
   ganttGroup: string; 
   relatedSpec?: SpecDetails | null;
@@ -240,114 +243,6 @@ const Card = ({ title, children, className = '' }) => {
     <div className={`bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-600 print:break-inside-avoid ${className}`}>
       <h3 className="text-sm font-medium text-gray-500 dark:text-slate-400">{title}</h3>
       {children}
-    </div>
-  );
-};
-
-
-// --- From components/GanttChart.tsx ---
-const GanttChart = ({ data }) => {
-  if (!data || data.length === 0) {
-    return <div className="text-center text-gray-500 dark:text-slate-400">No task data available for the Gantt chart.</div>;
-  }
-
-  const minDate = new Date(Math.min(...data.map(task => task.start.getTime())));
-  const maxDate = new Date(Math.max(...data.map(task => task.end.getTime())));
-  
-  minDate.setDate(minDate.getDate() - 1);
-  maxDate.setDate(maxDate.getDate() + 1);
-
-  const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 3600 * 24));
-
-  if (totalDays <= 0) {
-    return <div className="text-center text-gray-500 dark:text-slate-400">Invalid date range for Gantt chart.</div>;
-  }
-
-  const getDaysFromStart = (date) => {
-    const normMin = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
-    const normDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    return (normDate.getTime() - normMin.getTime()) / (1000 * 3600 * 24);
-  };
-
-  const colors = ['bg-amber-500', 'bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-purple-500', 'bg-yellow-500'];
-  const formatDate = (date) => date.toLocaleDateString();
-
-  const gridLines = [];
-  const dateLabels = [];
-  for (let i = 0; i < totalDays; i++) {
-    const currentDate = new Date(minDate);
-    currentDate.setDate(currentDate.getDate() + i);
-    gridLines.push(
-      <div key={`grid-${i}`} className="flex-shrink-0 w-full border-l border-gray-200 dark:border-slate-700/50" style={{ width: `calc(100% / ${totalDays})` }}></div>
-    );
-     dateLabels.push(
-      <div key={`label-${i}`} className="text-center text-xs text-gray-400 dark:text-slate-500" style={{ width: `calc(100% / ${totalDays})` }}>
-          {currentDate.getDate()}
-      </div>
-    );
-  }
-
-  return (
-    <div className="font-sans text-sm">
-      <div className="print:hidden">
-        <div className="flex">
-          {/* Task Labels Column */}
-          <div className="w-40 pr-4 shrink-0">
-            {data.map(task => (
-              <div key={`label-${task.name}`} className="h-6 flex items-center justify-end text-gray-700 dark:text-slate-300 truncate" title={task.name}>
-                {task.name}
-              </div>
-            ))}
-          </div>
-          {/* Timeline Area */}
-          <div className="flex-1 relative">
-            {/* Grid Background */}
-            <div className="absolute top-0 left-0 w-full h-full flex z-0">
-              {gridLines}
-            </div>
-            {/* Task Bars */}
-            <div className="relative z-10">
-              {data.map((task, index) => {
-                  const startDays = getDaysFromStart(task.start);
-                  const durationDays = getDaysFromStart(task.end) - startDays + 1;
-                  const leftPercentage = (startDays / totalDays) * 100;
-                  const widthPercentage = (durationDays / totalDays) * 100;
-                  return (
-                    <div key={`bar-container-${task.name}`} className="h-6 flex items-center">
-                      <div
-                        className={`h-4 rounded-sm ${colors[index % colors.length]}`}
-                        style={{
-                          marginLeft: `${leftPercentage}%`,
-                          width: `${widthPercentage}%`,
-                        }}
-                        title={`${task.name}: ${formatDate(task.start)} to ${formatDate(task.end)}`}
-                      ></div>
-                    </div>
-                  );
-              })}
-            </div>
-          </div>
-        </div>
-        {/* Date Labels Row */}
-        <div className="flex mt-1">
-          <div className="w-40 pr-4 shrink-0"></div>
-          <div className="flex-1 flex">{dateLabels}</div>
-        </div>
-        <div className="flex justify-between mt-1 text-xs text-gray-500 dark:text-slate-400">
-            <span>{minDate.toLocaleDateString()}</span>
-            <span>{maxDate.toLocaleDateString()}</span>
-        </div>
-      </div>
-      <div className="hidden print:block">
-        <h4 className="font-bold mb-2">Task Summary:</h4>
-        <ul className="list-disc list-inside">
-          {data.map((task, index) => (
-            <li key={`print-${index}`}>
-              <strong>{task.name}:</strong> {formatDate(task.start)} to {formatDate(task.end)}
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 };
@@ -568,9 +463,10 @@ const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
 };
 
 
-// --- New Component: ScheduleTimelineView ---
-const ScheduleTimelineView = ({ tasks, selectedTask, onTaskClick, className = '' }) => {
-    const { useMemo } = React;
+// --- Modified Component: ScheduleTimelineView ---
+const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskMove, className = '' }) => {
+    const { useMemo, useState } = React;
+    const [dragOverDate, setDragOverDate] = useState(null);
 
     const tasksByDate = useMemo(() => {
         if (!tasks) return {};
@@ -589,10 +485,33 @@ const ScheduleTimelineView = ({ tasks, selectedTask, onTaskClick, className = ''
     if (!tasks || tasks.length === 0) {
         return (
             <div className="flex items-center justify-center h-full text-gray-500 dark:text-slate-400">
-                <p>No tasks scheduled yet. Add steps with dates in the "Process Flow" tab.</p>
+                <p>No tasks scheduled. Add dates to steps in "Process Flow" tab.</p>
             </div>
         );
     }
+    
+    const handleDragStart = (e, taskId) => {
+        e.dataTransfer.setData('taskId', taskId);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+    
+    const handleDragOver = (e, date) => {
+        e.preventDefault();
+        setDragOverDate(date);
+    };
+
+    const handleDragLeave = () => {
+        setDragOverDate(null);
+    };
+    
+    const handleDrop = (e, targetDate) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData('taskId');
+        if (taskId) {
+            onTaskMove(taskId, targetDate);
+        }
+        setDragOverDate(null);
+    };
 
     return (
         <div className={`overflow-x-auto pb-4 h-full ${className}`}>
@@ -601,25 +520,41 @@ const ScheduleTimelineView = ({ tasks, selectedTask, onTaskClick, className = ''
                     const tasksOnDate = tasksByDate[date];
                     const firstTask = tasksOnDate[0];
                     return (
-                        <div key={date} className="w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full">
+                        <div 
+                            key={date}
+                            onDragOver={(e) => handleDragOver(e, date)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, date)}
+                            className={`w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full transition-colors duration-300 ${dragOverDate === date ? 'bg-amber-100 dark:bg-slate-800' : ''}`}
+                        >
                             <div className="p-3 bg-amber-100 dark:bg-slate-700 rounded-t-xl border-b border-amber-200 dark:border-slate-600 sticky top-0 z-10">
                                 <h3 className="font-bold text-lg text-amber-900 dark:text-amber-400">{date}</h3>
                                 <p className="text-sm text-gray-600 dark:text-slate-400">{firstTask.day}</p>
                             </div>
                             <div className="p-3 space-y-3 overflow-y-auto flex-1">
                                 {tasksOnDate.map((task) => {
-                                    const isSelected = selectedTask && selectedTask.id === task.id;
+                                    const timeRange = task.isMultiDay ? task.notes.match(/\(([^)]+)\)/)?.[1] || '' : `${task.startTime} - ${task.endTime}`;
                                     return (
                                         <div 
                                             key={task.id} 
-                                            onClick={() => onTaskClick && onTaskClick(task)}
-                                            className={`bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative ${onTaskClick ? 'cursor-pointer' : 'cursor-default'} transition-all duration-200 ${isSelected ? 'ring-2 ring-amber-500' : (onTaskClick ? 'hover:shadow-md hover:-translate-y-0.5' : '')}`} 
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, task.id)}
+                                            className={`bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
                                             title={task.notes}
                                         >
-                                            <h4 className={`font-semibold ${task.highlight || 'text-gray-800 dark:text-slate-200'}`}>{task.task}</h4>
-                                            <p className="text-sm text-gray-600 dark:text-slate-400 mt-1 truncate">
-                                                {task.notes.split('|')[0].trim()}
-                                            </p>
+                                            <EditableField 
+                                                as="h4" 
+                                                initialValue={task.task} 
+                                                onSave={(v) => onTaskChange(task.id, 'name', v)}
+                                                className={`font-semibold ${task.highlight || 'text-gray-800 dark:text-slate-200'}`}
+                                            />
+                                            <EditableField
+                                                as="p"
+                                                initialValue={timeRange}
+                                                onSave={(v) => onTaskChange(task.id, 'time', v)}
+                                                className="text-sm text-gray-600 dark:text-slate-400 mt-1"
+                                                inputClassName="text-sm"
+                                            />
                                         </div>
                                     )
                                 })}
@@ -675,90 +610,6 @@ const SchedulePrintView = ({ tasks }) => {
             </div>
         </div>
     );
-};
-
-// --- From components/ScheduleTab.tsx ---
-const ScheduleTab = ({ tasks, onTaskChange }) => {
-  const { useState, useMemo, useEffect } = React;
-  const [selectedTask, setSelectedTask] = useState(null);
-
-  useEffect(() => {
-    // If there's no selected task, or the selected task is no longer in the list,
-    // default to the first task in the new list.
-    const isSelectedTaskInList = selectedTask && tasks.some(t => t.id === selectedTask.id);
-    if (!isSelectedTaskInList && tasks && tasks.length > 0) {
-      setSelectedTask(tasks[0]);
-    }
-  }, [tasks]);
-
-  const relatedSpec = useMemo(() => {
-    return selectedTask ? selectedTask.relatedSpec : null;
-  }, [selectedTask]);
-
-  if (!tasks || tasks.length === 0) {
-    return (
-      <section>
-        <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
-          No tasks scheduled yet. Add steps with dates in the "Process Flow" tab.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section>
-      <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
-        此為詳細的 NPI 試產任務時程表，包含所有關鍵日期、任務、QC 檢查點與最終交付物。點擊任務卡片以查看相關規格。
-      </p>
-      
-      {/* New Flex Layout for screen */}
-      <div className="flex space-x-6 h-[70vh] no-print">
-        {/* Left Side: Spec Details */}
-        <div className="w-1/4 flex-shrink-0 bg-white dark:bg-slate-800/50 p-6 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col">
-          <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">相關規格 (Related Spec)</h3>
-          <div className="flex-grow overflow-y-auto">
-            {selectedTask ? (
-              relatedSpec ? (
-                <div>
-                  <h4 className="text-lg font-semibold text-amber-800 dark:text-amber-500 mb-3">{relatedSpec.title}</h4>
-                  <ul className="list-disc list-outside ml-5 space-y-2 text-gray-800 dark:text-slate-300">
-                    {Object.entries(relatedSpec.items || {}).map(([key, value]) => (
-                      <li key={key}>
-                        <span className="font-medium">{key}:</span> {String(value)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500 dark:text-slate-400">
-                  <p>此任務沒有相關的規格。</p>
-                </div>
-              )
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-500 dark:text-slate-400">
-                <p>點擊右方的一個任務以查看其規格。</p>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Right Side: Timeline View */}
-        <div className="w-3/4">
-           <ScheduleTimelineView 
-                tasks={tasks}
-                selectedTask={selectedTask}
-                onTaskClick={setSelectedTask}
-            />
-        </div>
-      </div>
-
-
-      {/* Keep original table for printing */}
-       <div className="hidden print:block">
-          <SchedulePrintView tasks={tasks} />
-       </div>
-    </section>
-  );
 };
 
 
@@ -1147,7 +998,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
 
 
 // --- From components/OverviewTab.tsx ---
-const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks }) => {
+const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks, onScheduleTaskChange, onScheduleTaskMove }) => {
     const { useState, useMemo } = React;
     const [draggedSpecId, setDraggedSpecId] = useState(null);
 
@@ -1253,7 +1104,6 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
             
             {/* 2. Process Flow Diagram */}
             <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 flex flex-col items-center">
-                <h2 className="text-xl font-semibold mb-8 text-amber-900 dark:text-amber-400 text-center">{processFlowTitle}</h2>
                 <div className="flex flex-wrap items-center justify-center gap-2 py-4">
                     {activeSteps.map((step, index) => (
                         <ProcessFlowDiagramNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />
@@ -1298,7 +1148,11 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                 <div className="lg:w-3/4 xl:w-4/5">
                     <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Schedule Timeline</h3>
                     <div className="h-[65vh] bg-white dark:bg-slate-800/50 p-1 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
-                         <ScheduleTimelineView tasks={scheduleTasks} />
+                         <ScheduleTimelineView 
+                            tasks={scheduleTasks} 
+                            onTaskChange={onScheduleTaskChange}
+                            onTaskMove={onScheduleTaskMove}
+                         />
                     </div>
                 </div>
             </div>
@@ -1327,6 +1181,10 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                         </li>
                     ))}
                 </ol>
+                <div className="print-break-before-page">
+                    <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Detailed Schedule</h3>
+                    <SchedulePrintView tasks={scheduleTasks} />
+                </div>
             </div>
         </section>
     );
@@ -1586,6 +1444,68 @@ const App = () => {
     setAttendees(value.split('\n'));
   };
 
+  const formatToDateTimeLocal = (date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const handleScheduleTaskChange = (taskId, field, value) => {
+    const stepId = taskId.split('-')[0];
+    const stepToUpdate = processSteps.find(s => s.id === stepId);
+    if (!stepToUpdate) return;
+
+    if (field === 'name') {
+        handleProcessStepChange(stepId, 'name', value);
+    } else if (field === 'time') {
+        const timeParts = value.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
+        if (timeParts && timeParts.length === 3) {
+            const [_, startTimeStr, endTimeStr] = timeParts;
+            const [startHour, startMin] = startTimeStr.split(':').map(Number);
+            const [endHour, endMin] = endTimeStr.split(':').map(Number);
+
+            const newStartDate = new Date(stepToUpdate.startDate);
+            newStartDate.setHours(startHour, startMin);
+
+            const newEndDate = new Date(stepToUpdate.endDate);
+            // If end time is earlier than start time, assume it's the next day
+            if (newEndDate.getTime() < newStartDate.getTime()) {
+                newEndDate.setDate(newEndDate.getDate() + 1);
+            }
+            newEndDate.setHours(endHour, endMin);
+
+            handleBulkStepDateChange([stepId], 'startDate', formatToDateTimeLocal(newStartDate));
+            handleBulkStepDateChange([stepId], 'endDate', formatToDateTimeLocal(newEndDate));
+        }
+    }
+  };
+
+  const handleScheduleTaskMove = (taskId, newDateStr) => {
+    const stepId = taskId.split('-')[0];
+    const stepToMove = processSteps.find(s => s.id === stepId);
+    if (!stepToMove || !stepToMove.startDate || !stepToMove.endDate) return;
+
+    try {
+        const oldStartDate = new Date(stepToMove.startDate);
+        const oldEndDate = new Date(stepToMove.endDate);
+        const duration = oldEndDate.getTime() - oldStartDate.getTime();
+
+        const newStartDate = new Date(newDateStr);
+        // Preserve original time of day
+        newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds(), oldStartDate.getMilliseconds());
+
+        const newEndDate = new Date(newStartDate.getTime() + duration);
+
+        handleBulkStepDateChange([stepId], 'startDate', formatToDateTimeLocal(newStartDate));
+        handleBulkStepDateChange([stepId], 'endDate', formatToDateTimeLocal(newEndDate));
+    } catch(e) {
+        console.error("Error moving schedule task:", e);
+    }
+  };
+
   const scheduleTasks = useMemo(() => {
     return processSteps
       .filter(step => step.isActive && step.startDate && step.endDate)
@@ -1612,6 +1532,7 @@ const App = () => {
               const endDay = new Date(end);
               endDay.setHours(0, 0, 0, 0);
               const isLastDay = iterDate.getTime() === endDay.getTime();
+              const isMultiDay = startDay.getTime() !== endDay.getTime();
               
               const startTime = isFirstDay ? start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '00:00';
               const endTime = isLastDay ? end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '23:59';
@@ -1619,7 +1540,7 @@ const App = () => {
               let notes = `${step.details} (${startTime} - ${endTime})`;
               if (relatedSpec) {
                 const specDetails = Object.entries(relatedSpec.items || {}).map(([k,v]) => `${k}: ${v}`).join('; ');
-                notes += ` | Related Spec: ${relatedSpec.title || ''} | ${specDetails}`;
+                notes += ` | Spec: ${relatedSpec.title || ''}`;
               }
 
               tasks.push({
@@ -1628,6 +1549,9 @@ const App = () => {
                   day: dayOfWeek,
                   task: step.name,
                   notes: notes,
+                  startTime,
+                  endTime,
+                  isMultiDay,
                   ganttGroup: step.name,
                   relatedSpec: relatedSpec,
               });
@@ -1639,21 +1563,7 @@ const App = () => {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [processSteps, specs]);
 
-  const ganttTasks = useMemo(() => {
-    const taskGroups = scheduleTasks.reduce((acc, task) => {
-      acc[task.ganttGroup] = acc[task.ganttGroup] || [];
-      acc[task.ganttGroup].push(new Date(task.date));
-      return acc;
-    }, {});
-
-    return Object.entries(taskGroups).map(([name, dates]) => {
-      const start = new Date(Math.min(...dates));
-      const end = new Date(Math.max(...dates));
-      return { name, start, end };
-    }).sort((a,b) => a.start.getTime() - b.start.getTime());
-  }, [scheduleTasks]);
-
-  const tabs = ['Overview', 'Specs', 'Process Flow', 'Schedule', 'Attendees'];
+  const tabs = ['Overview', 'Specs', 'Process Flow', 'Attendees'];
   
   return (
     <div className="mx-auto p-4 md:p-8 print-container">
@@ -1677,6 +1587,8 @@ const App = () => {
                     onReorderSpecs={handleReorderSpecs}
                     processFlowTitle={processFlowTitle}
                     scheduleTasks={scheduleTasks}
+                    onScheduleTaskChange={handleScheduleTaskChange}
+                    onScheduleTaskMove={handleScheduleTaskMove}
                 />
             </div>
             <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
@@ -1711,11 +1623,6 @@ const App = () => {
                     />
                 </TabContentWrapper>
              </div>
-             <div className={activeTab !== 'Schedule' ? 'hidden' : ''}>
-                <TabContentWrapper title="時程與任務 (Schedule)">
-                    <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
-                </TabContentWrapper>
-             </div>
              <div className={activeTab !== 'Attendees' ? 'hidden' : ''}>
                  <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
                     <AttendeesTab 
@@ -1738,6 +1645,8 @@ const App = () => {
                     onReorderSpecs={() => {}} 
                     processFlowTitle={processFlowTitle}
                     scheduleTasks={scheduleTasks}
+                    onScheduleTaskChange={() => {}}
+                    onScheduleTaskMove={() => {}}
                 />
             </TabContentWrapper>
             <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
@@ -1747,7 +1656,7 @@ const App = () => {
                 <SpecsTab specs={specs} onSpecChange={() => {}} onAddSpec={() => {}} onDeleteSpec={() => {}} onAddSpecItem={() => {}} onDeleteSpecItem={() => {}} onSpecItemKeyChange={() => {}} onReorderSpecs={() => {}} />
             </TabContentWrapper>
              <TabContentWrapper title="時程與任務 (Schedule)">
-                 <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
+                 <SchedulePrintView tasks={scheduleTasks} />
              </TabContentWrapper>
             <TabContentWrapper title="製程與流程 (Process Flow)">
                 <div className="text-center font-bold text-lg mb-4">{processFlowTitle}</div>
