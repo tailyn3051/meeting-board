@@ -1220,7 +1220,7 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                         </li>
                     ))}
                 </ol>
-                <div className="print-break-before-page">
+                <div>
                     <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Detailed Schedule</h3>
                     <SchedulePrintView tasks={scheduleTasks} />
                 </div>
@@ -1659,7 +1659,7 @@ const App = () => {
         />
         <main>
           <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
-          <div className="tab-content mt-6">
+          <div className="tab-content mt-6 no-print">
             <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
                 <OverviewTab 
                     details={projectDetails}
