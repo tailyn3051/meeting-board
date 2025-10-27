@@ -537,6 +537,9 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
             <div className="flex space-x-4 min-w-max h-full">
                 {sortedDates.map(date => {
                     const tasksOnDate = tasksByDate[date];
+                    const firstTask = tasksOnDate[0];
+                    if (!firstTask) return null; // Defensive check for empty date columns
+
                     return (
                         <div 
                             key={date}
@@ -551,7 +554,6 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                             <div className="p-3 space-y-3 overflow-y-auto flex-1">
                                 {tasksOnDate.map((task) => {
                                     const timeRange = task.isMultiDay ? task.notes.match(/\(([^)]+)\)/)?.[1] || '' : `${task.startTime} - ${task.endTime}`;
-                                    const firstTask = tasksOnDate[0];
                                     return (
                                         <div 
                                             key={task.id} 
