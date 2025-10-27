@@ -1444,7 +1444,7 @@ const App = () => {
   const tabs = ['Overview', 'Specs', 'Process Flow', 'Schedule', 'Attendees'];
   
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 print-container">
+    <div className="mx-auto p-4 md:p-8 print-container">
         <Header 
             appTitle={appTitle}
             onAppTitleChange={setAppTitle}
@@ -1521,7 +1521,20 @@ const App = () => {
                 <SpecsTab specs={specs} onSpecChange={() => {}} onAddSpec={() => {}} onDeleteSpec={() => {}} onAddSpecItem={() => {}} onDeleteSpecItem={() => {}} onSpecItemKeyChange={() => {}} onReorderSpecs={() => {}} />
             </TabContentWrapper>
              <TabContentWrapper title="時程與任務 (Schedule)">
-                <ScheduleTab tasks={scheduleTasks} specs={specs} onTaskChange={() => {}} />
+                 <ScheduleTab tasks={scheduleTasks} specs={specs} onTaskChange={() => {}} />
+             </TabContentWrapper>
+            <TabContentWrapper title="製程與流程 (Process Flow)">
+                <div className="text-center font-bold text-lg mb-4">{processFlowTitle}</div>
+                {/* Simplified Print View for Process Flow */}
+                <ol className="list-decimal list-inside space-y-2">
+                    {processSteps.filter(s => s.isActive).map(step => (
+                        <li key={`print-step-${step.id}`}>
+                            <strong>{step.name}:</strong> 
+                            <span className="text-gray-600 ml-2">{step.details}</span>
+                            {step.startDate && <span className="text-sm text-gray-500 ml-2">({step.startDate.replace('T', ' ')} - {step.endDate.replace('T', ' ')})</span>}
+                        </li>
+                    ))}
+                </ol>
             </TabContentWrapper>
           </div>
         </main>
@@ -1529,18 +1542,10 @@ const App = () => {
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+const container = document.getElementById('root');
+const root = ReactDOM.createRoot(container);
+root.render(<App />);
 
-// Register Service Worker for PWA/offline functionality
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').then(registration => {
-      console.log('ServiceWorker registration successful with scope: ', registration.scope);
-    }, err => {
-      console.log('ServiceWorker registration failed: ', err);
-    });
-  });
-}
     </script>
 </body>
 </html>
