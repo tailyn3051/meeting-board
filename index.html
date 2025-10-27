@@ -1194,23 +1194,33 @@ const App = () => {
       const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (savedState) {
         const parsed = JSON.parse(savedState);
-        // Basic validation
-        if(parsed.projectDetails && parsed.specs && parsed.processSteps) {
+        
+        // Robust validation to prevent crashes from malformed localStorage data.
+        if (parsed && parsed.projectDetails && Array.isArray(parsed.specs) && Array.isArray(parsed.processSteps)) {
+            
+            // Sanitize specs: ensure each spec has an 'items' object property.
+            const sanitizedSpecs = parsed.specs.map(s => ({
+                ...s,
+                items: (s && s.items && typeof s.items === 'object' && !Array.isArray(s.items)) ? s.items : {}
+            }));
+            
             return {
                 appTitle: parsed.appTitle || "NPI Meeting Board",
                 projectName: parsed.projectName || "New Project",
-                projectDetails: parsed.projectDetails,
-                specs: parsed.specs,
+                projectDetails: { ...initialProjectDetails, ...parsed.projectDetails },
+                specs: sanitizedSpecs,
                 processSteps: parsed.processSteps,
-                attendees: parsed.attendees || [],
+                attendees: Array.isArray(parsed.attendees) ? parsed.attendees : [],
                 meetingDate: parsed.meetingDate || new Date().toISOString().slice(0, 10),
             };
         }
       }
     } catch (error) {
       console.error("Failed to parse state from localStorage:", error);
+      // If parsing fails, we fall through to the default state.
     }
-    // Return default state if anything fails
+    
+    // Return default state if no valid saved state is found.
     return {
       appTitle: "NPI Meeting Board",
       projectName: "New Project",
