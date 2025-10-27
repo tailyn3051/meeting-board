@@ -537,7 +537,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
             <div className="flex space-x-4 min-w-max h-full">
                 {sortedDates.map(date => {
                     const tasksOnDate = tasksByDate[date];
-                    const firstTask = tasksOnDate[0];
+                    const firstTask = tasksOnDate && tasksOnDate.length > 0 ? tasksOnDate[0] : null;
                     if (!firstTask) return null; // Defensive check for empty date columns
 
                     return (
@@ -1524,52 +1524,57 @@ const App = () => {
   };
 
   const handleReorderProcessStep = (draggedStepId, targetStepId, newDateStr) => {
-    if (!draggedStepId || !newDateStr) return;
-    if (draggedStepId === targetStepId) return;
+    if (!draggedStepId) return;
 
     setProcessSteps(prevSteps => {
-        let reorderedSteps = [...prevSteps];
+        let allSteps = [...prevSteps];
+        const draggedStep = allSteps.find(s => s.id === draggedStepId);
+        if (!draggedStep) return prevSteps;
 
-        // --- Reorder active steps if a valid target is provided ---
-        if (targetStepId) {
-            const activeSteps = prevSteps.filter(s => s.isActive);
-            const inactiveSteps = prevSteps.filter(s => !s.isActive);
-            const draggedIndex = activeSteps.findIndex(s => s.id === draggedStepId);
-            let targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
-            if (draggedIndex !== -1 && targetIndex !== -1) {
-                const reorderedActiveSteps = [...activeSteps];
-                const [draggedItem] = reorderedActiveSteps.splice(draggedIndex, 1);
-                targetIndex = reorderedActiveSteps.findIndex(s => s.id === targetStepId);
-                reorderedActiveSteps.splice(targetIndex, 0, draggedItem); // Insert before target
-                reorderedSteps = [...reorderedActiveSteps, ...inactiveSteps];
+        // 1. Update the date and time for the dragged step if a new date is provided
+        if (newDateStr) {
+            const updatedDraggedStep = { ...draggedStep };
+            try {
+                const oldStartDate = new Date(draggedStep.startDate);
+                const oldEndDate = new Date(draggedStep.endDate);
+                const duration = oldEndDate.getTime() - oldStartDate.getTime();
+                
+                // FIX: Parse newDateStr as local midnight to avoid timezone issues
+                const newStartDate = new Date(`${newDateStr}T00:00:00`);
+                newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
+                
+                const newEndDate = new Date(newStartDate.getTime() + duration);
+
+                updatedDraggedStep.startDate = formatToDateTimeLocal(newStartDate);
+                updatedDraggedStep.endDate = formatToDateTimeLocal(newEndDate);
+                
+                // Apply the date change
+                allSteps = allSteps.map(s => s.id === draggedStepId ? updatedDraggedStep : s);
+
+            } catch (e) {
+                console.error("Error updating date on drag:", e);
+                // Continue to reordering even if date update fails for some reason
             }
         }
         
-        // --- Always update the date of the dragged step to the new column's date ---
-        const finalSteps = reorderedSteps.map(step => {
-            if (step.id === draggedStepId && step.startDate) {
-                const newStep = { ...step };
-                try {
-                    const oldStartDate = new Date(newStep.startDate);
-                    const oldEndDate = new Date(newStep.endDate);
-                    const duration = oldEndDate.getTime() - oldStartDate.getTime();
-                    
-                    const newStartDate = new Date(newDateStr);
-                    newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
-                    
-                    const newEndDate = new Date(newStartDate.getTime() + duration);
-                    
-                    newStep.startDate = formatToDateTimeLocal(newStartDate);
-                    newStep.endDate = formatToDateTimeLocal(newEndDate);
-                    return newStep;
-                } catch (e) {
-                    return step; // Return original on error
-                }
-            }
-            return step;
-        });
+        // 2. Reorder the steps if a target is provided and it's different from the dragged item
+        if (targetStepId && draggedStepId !== targetStepId) {
+            const activeSteps = allSteps.filter(s => s.isActive);
+            const inactiveSteps = allSteps.filter(s => !s.isActive);
 
-        return finalSteps;
+            const draggedIndex = activeSteps.findIndex(s => s.id === draggedStepId);
+            let targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
+
+            if (draggedIndex > -1 && targetIndex > -1) {
+                const [draggedItem] = activeSteps.splice(draggedIndex, 1);
+                // After splice, the targetIndex might have shifted, so we find it again.
+                targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
+                activeSteps.splice(targetIndex, 0, draggedItem);
+                allSteps = [...activeSteps, ...inactiveSteps];
+            }
+        }
+        
+        return allSteps;
     });
 };
 
@@ -1589,7 +1594,12 @@ const App = () => {
           const relatedSpec = step.relatedSpecId ? specs.find(s => s.id === step.relatedSpecId) : null;
 
           while (iterDate <= end) {
-              const dateStr = iterDate.toISOString().slice(0, 10);
+              // FIX: Generate date string from local date parts to avoid UTC conversion issues
+              const year = iterDate.getFullYear();
+              const month = (iterDate.getMonth() + 1).toString().padStart(2, '0');
+              const day = iterDate.getDate().toString().padStart(2, '0');
+              const dateStr = `${year}-${month}-${day}`;
+              
               const dayOfWeek = iterDate.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週','');
               
               const startDay = new Date(start);
