@@ -133,7 +133,7 @@ interface ScheduleTask {
   notes: string;
   highlight?: string;
   ganttGroup: string; 
-  relatedSpecId?: string | null;
+  relatedSpec?: SpecDetails | null;
 }
 
 interface GanttTask {
@@ -569,7 +569,7 @@ const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
 
 
 // --- From components/ScheduleTab.tsx ---
-const ScheduleTab = ({ tasks, specs, onTaskChange }) => {
+const ScheduleTab = ({ tasks, onTaskChange }) => {
   const { useState, useMemo, useEffect } = React;
   const [selectedTask, setSelectedTask] = useState(null);
 
@@ -598,9 +598,8 @@ const ScheduleTab = ({ tasks, specs, onTaskChange }) => {
   const sortedDates = useMemo(() => Object.keys(tasksByDate).sort(), [tasksByDate]);
   
   const relatedSpec = useMemo(() => {
-    if (!selectedTask || !selectedTask.relatedSpecId) return null;
-    return specs.find(spec => spec.id === selectedTask.relatedSpecId);
-  }, [selectedTask, specs]);
+    return selectedTask ? selectedTask.relatedSpec : null;
+  }, [selectedTask]);
 
   if (!tasks || tasks.length === 0) {
     return (
@@ -1399,18 +1398,25 @@ const App = () => {
       .filter(step => step.isActive && step.startDate && step.endDate)
       .flatMap(step => {
           const tasks = [];
-          let current = new Date(step.startDate);
+          const start = new Date(step.startDate);
           const end = new Date(step.endDate);
           
-          while (current <= end) {
-              const dateStr = current.toISOString().slice(0, 10);
-              const dayOfWeek = current.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週','');
-              
-              const startTime = current.getHours() === 0 && current.getMinutes() === 0 ? new Date(step.startDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : current.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-              
-              const endTime = new Date(step.endDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          if (isNaN(start) || isNaN(end) || end < start) return [];
 
-              const relatedSpec = step.relatedSpecId ? specs.find(s => s.id === step.relatedSpecId) : null;
+          let iterDate = new Date(start);
+          iterDate.setHours(0, 0, 0, 0);
+
+          const relatedSpec = step.relatedSpecId ? specs.find(s => s.id === step.relatedSpecId) : null;
+
+          while (iterDate <= end) {
+              const dateStr = iterDate.toISOString().slice(0, 10);
+              const dayOfWeek = iterDate.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週','');
+              
+              const isFirstDay = iterDate.getTime() === new Date(start).setHours(0,0,0,0).getTime();
+              const isLastDay = iterDate.getTime() === new Date(end).setHours(0,0,0,0).getTime();
+              
+              const startTime = isFirstDay ? start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '00:00';
+              const endTime = isLastDay ? end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '23:59';
               
               let notes = `${step.details} (${startTime} - ${endTime})`;
               if (relatedSpec) {
@@ -1425,11 +1431,10 @@ const App = () => {
                   task: step.name,
                   notes: notes,
                   ganttGroup: step.name,
-                  relatedSpecId: step.relatedSpecId,
+                  relatedSpec: relatedSpec,
               });
 
-              current.setDate(current.getDate() + 1);
-              current.setHours(0, 0, 0, 0); // Start next day at midnight
+              iterDate.setDate(iterDate.getDate() + 1);
           }
           return tasks;
       })
@@ -1504,7 +1509,7 @@ const App = () => {
              </div>
              <div className={activeTab !== 'Schedule' ? 'hidden' : ''}>
                 <TabContentWrapper title="時程與任務 (Schedule)">
-                    <ScheduleTab tasks={scheduleTasks} specs={specs} onTaskChange={() => {}} />
+                    <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
                 </TabContentWrapper>
              </div>
              <div className={activeTab !== 'Attendees' ? 'hidden' : ''}>
@@ -1530,7 +1535,7 @@ const App = () => {
                 <SpecsTab specs={specs} onSpecChange={() => {}} onAddSpec={() => {}} onDeleteSpec={() => {}} onAddSpecItem={() => {}} onDeleteSpecItem={() => {}} onSpecItemKeyChange={() => {}} onReorderSpecs={() => {}} />
             </TabContentWrapper>
              <TabContentWrapper title="時程與任務 (Schedule)">
-                 <ScheduleTab tasks={scheduleTasks} specs={specs} onTaskChange={() => {}} />
+                 <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
              </TabContentWrapper>
             <TabContentWrapper title="製程與流程 (Process Flow)">
                 <div className="text-center font-bold text-lg mb-4">{processFlowTitle}</div>
