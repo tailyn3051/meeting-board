@@ -520,7 +520,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
         const draggedStepId = e.dataTransfer.getData('stepId');
         const tasksOnDate = tasksByDate[date] || [];
         // If dropping on column, target is the last item on that day for reordering purposes.
-        // If empty, target is null, which means just change date.
+        // If empty, target is null, which means just change date and sort chronologically.
         const lastTaskOnDate = tasksOnDate[tasksOnDate.length - 1];
         const targetStepId = lastTaskOnDate ? lastTaskOnDate.stepId : null;
         if (draggedStepId) {
@@ -1524,59 +1524,55 @@ const App = () => {
   };
 
   const handleReorderProcessStep = (draggedStepId, targetStepId, newDateStr) => {
-    if (!draggedStepId) return;
+      if (!draggedStepId) return;
 
-    setProcessSteps(prevSteps => {
-        let allSteps = [...prevSteps];
-        const draggedStep = allSteps.find(s => s.id === draggedStepId);
-        if (!draggedStep) return prevSteps;
+      setProcessSteps(prevSteps => {
+          let allSteps = [...prevSteps];
+          const draggedStepOriginal = allSteps.find(s => s.id === draggedStepId);
+          if (!draggedStepOriginal) return prevSteps;
 
-        // 1. Update the date and time for the dragged step if a new date is provided
-        if (newDateStr) {
-            const updatedDraggedStep = { ...draggedStep };
-            try {
-                const oldStartDate = new Date(draggedStep.startDate);
-                const oldEndDate = new Date(draggedStep.endDate);
-                const duration = oldEndDate.getTime() - oldStartDate.getTime();
-                
-                // FIX: Parse newDateStr as local midnight to avoid timezone issues
-                const newStartDate = new Date(`${newDateStr}T00:00:00`);
-                newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
-                
-                const newEndDate = new Date(newStartDate.getTime() + duration);
+          // 1. Create a mutable, updated version of the step with its new date
+          const updatedDraggedStep = { ...draggedStepOriginal };
+          if (newDateStr) {
+              try {
+                  const oldStartDate = new Date(draggedStepOriginal.startDate || Date.now());
+                  const oldEndDate = new Date(draggedStepOriginal.endDate || Date.now());
+                  const duration = oldEndDate.getTime() - oldStartDate.getTime();
 
-                updatedDraggedStep.startDate = formatToDateTimeLocal(newStartDate);
-                updatedDraggedStep.endDate = formatToDateTimeLocal(newEndDate);
-                
-                // Apply the date change
-                allSteps = allSteps.map(s => s.id === draggedStepId ? updatedDraggedStep : s);
+                  const newStartDate = new Date(`${newDateStr}T00:00:00`);
+                  newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
+                  
+                  const newEndDate = new Date(newStartDate.getTime() + duration);
 
-            } catch (e) {
-                console.error("Error updating date on drag:", e);
-                // Continue to reordering even if date update fails for some reason
-            }
-        }
-        
-        // 2. Reorder the steps if a target is provided and it's different from the dragged item
-        if (targetStepId && draggedStepId !== targetStepId) {
-            const activeSteps = allSteps.filter(s => s.isActive);
-            const inactiveSteps = allSteps.filter(s => !s.isActive);
-
-            const draggedIndex = activeSteps.findIndex(s => s.id === draggedStepId);
-            let targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
-
-            if (draggedIndex > -1 && targetIndex > -1) {
-                const [draggedItem] = activeSteps.splice(draggedIndex, 1);
-                // After splice, the targetIndex might have shifted, so we find it again.
-                targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
-                activeSteps.splice(targetIndex, 0, draggedItem);
-                allSteps = [...activeSteps, ...inactiveSteps];
-            }
-        }
-        
-        return allSteps;
-    });
-};
+                  updatedDraggedStep.startDate = formatToDateTimeLocal(newStartDate);
+                  updatedDraggedStep.endDate = formatToDateTimeLocal(newEndDate);
+              } catch (e) {
+                  console.error("Error calculating new date for dragged step:", e);
+                  return prevSteps; // Abort on date error
+              }
+          }
+          
+          // Temporarily update the step in the main array to have its new date for sorting
+          allSteps = allSteps.map(s => s.id === draggedStepId ? updatedDraggedStep : s);
+          
+          // 2. Separate active and inactive steps for reordering
+          let activeSteps = allSteps.filter(s => s.isActive);
+          const inactiveSteps = allSteps.filter(s => !s.isActive);
+          
+          // 3. Re-sort all active steps chronologically. This is the simplest and most reliable
+          //    way to ensure the process flow always matches the schedule's visual order.
+          activeSteps.sort((a, b) => {
+              const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+              const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+              if (dateA !== dateB) return dateA - dateB;
+              
+              // Fallback for items on the same day (should be rare, but good for stability)
+              return 0; 
+          });
+          
+          return [...activeSteps, ...inactiveSteps];
+      });
+  };
 
   const scheduleTasks = useMemo(() => {
     return processSteps
@@ -1594,7 +1590,6 @@ const App = () => {
           const relatedSpec = step.relatedSpecId ? specs.find(s => s.id === step.relatedSpecId) : null;
 
           while (iterDate <= end) {
-              // FIX: Generate date string from local date parts to avoid UTC conversion issues
               const year = iterDate.getFullYear();
               const month = (iterDate.getMonth() + 1).toString().padStart(2, '0');
               const day = iterDate.getDate().toString().padStart(2, '0');
@@ -1644,7 +1639,6 @@ const App = () => {
         if (dateA !== dateB) {
             return dateA - dateB;
         }
-        // If dates are the same, sort by the original process step order
         const indexA = processSteps.findIndex(p => p.id === a.stepId);
         const indexB = processSteps.findIndex(p => p.id === b.stepId);
         return indexA - indexB;
