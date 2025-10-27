@@ -1411,7 +1411,7 @@ const App = () => {
           const start = new Date(step.startDate);
           const end = new Date(step.endDate);
           
-          if (isNaN(start) || isNaN(end) || end < start) return [];
+          if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return [];
 
           let iterDate = new Date(start);
           iterDate.setHours(0, 0, 0, 0);
@@ -1422,8 +1422,13 @@ const App = () => {
               const dateStr = iterDate.toISOString().slice(0, 10);
               const dayOfWeek = iterDate.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週','');
               
-              const isFirstDay = iterDate.getTime() === new Date(start).setHours(0,0,0,0).getTime();
-              const isLastDay = iterDate.getTime() === new Date(end).setHours(0,0,0,0).getTime();
+              const startDay = new Date(start);
+              startDay.setHours(0, 0, 0, 0);
+              const isFirstDay = iterDate.getTime() === startDay.getTime();
+
+              const endDay = new Date(end);
+              endDay.setHours(0, 0, 0, 0);
+              const isLastDay = iterDate.getTime() === endDay.getTime();
               
               const startTime = isFirstDay ? start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '00:00';
               const endTime = isLastDay ? end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '23:59';
