@@ -568,50 +568,109 @@ const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
 
 // --- From components/ScheduleTab.tsx ---
 const ScheduleTab = ({ tasks, onTaskChange }) => {
+  const { useMemo } = React;
+
+  // Group tasks by date
+  const tasksByDate = useMemo(() => {
+    if (!tasks) return {};
+    return tasks.reduce((acc, task) => {
+      const date = task.date;
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(task);
+      return acc;
+    }, {});
+  }, [tasks]);
+
+  const sortedDates = useMemo(() => Object.keys(tasksByDate).sort(), [tasksByDate]);
+
+  if (!tasks || tasks.length === 0) {
+    return (
+      <section>
+        <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
+          No tasks scheduled yet. Add steps with dates in the "Specs & Process Flow" tab.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section>
       <p className="text-base text-gray-700 dark:text-slate-300 mb-6">
         此為詳細的 NPI 試產任務時程表，包含所有關鍵日期、任務、QC 檢查點與最終交付物。
       </p>
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 overflow-hidden">
-        <div className="overflow-x-auto print:overflow-visible">
-          <table className="w-full min-w-[600px] print:min-w-full text-left">
-            <thead className="bg-amber-100 dark:bg-slate-700/50 border-b border-amber-200 dark:border-slate-600">
-              <tr>
-                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">日期</th>
-                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">星期</th>
-                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">任務 / 事件</th>
-                <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">備註</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-amber-100 dark:divide-slate-700">
-              {tasks.map((task, index) => {
-                const showDate = index === 0 || tasks[index - 1].date !== task.date;
-                return (
-                  <tr key={index} className="hover:bg-amber-50/70 dark:hover:bg-slate-700/50 print:break-inside-avoid">
-                    <td className="p-4 align-top">
-                      {showDate && (
-                        <div className="font-semibold text-gray-900 dark:text-slate-200 whitespace-nowrap">{task.date}</div>
-                      )}
-                    </td>
-                    <td className="p-4 align-top">
-                      {showDate && (
-                         <div className="text-gray-900 dark:text-slate-200">{task.day}</div>
-                      )}
-                    </td>
-                    <td className={`p-4 align-top font-medium ${task.highlight || 'text-gray-800 dark:text-slate-300'}`}>
-                      <div>{task.task}</div>
-                    </td>
-                    <td className={`p-4 align-top ${task.highlight?.includes('red') ? 'font-bold text-red-700 dark:text-red-500' : 'text-gray-800 dark:text-slate-300'}`}>
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{task.notes}</div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      
+      {/* New Timeline View for screen */}
+      <div className="overflow-x-auto pb-4 no-print">
+        <div className="flex space-x-4 min-w-max">
+          {sortedDates.map(date => {
+            const tasksOnDate = tasksByDate[date];
+            const firstTask = tasksOnDate[0];
+            return (
+              <div key={date} className="w-80 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col" style={{height: '65vh'}}>
+                <div className="p-3 bg-amber-100 dark:bg-slate-700 rounded-t-xl border-b border-amber-200 dark:border-slate-600 sticky top-0 z-10">
+                  <h3 className="font-bold text-lg text-amber-900 dark:text-amber-400">{date}</h3>
+                  <p className="text-sm text-gray-600 dark:text-slate-400">{firstTask.day}</p>
+                </div>
+                <div className="p-3 space-y-3 overflow-y-auto flex-1">
+                  {tasksOnDate.map((task, index) => (
+                    <div key={index} className="bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative" title={task.notes}>
+                      <h4 className={`font-semibold ${task.highlight || 'text-gray-800 dark:text-slate-200'}`}>{task.task}</h4>
+                      <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
+                        {task.notes.split('|')[0].trim()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Keep original table for printing */}
+       <div className="hidden print:block">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 overflow-hidden">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full min-w-[600px] print:min-w-full text-left">
+                <thead className="bg-amber-100 dark:bg-slate-700/50 border-b border-amber-200 dark:border-slate-600">
+                  <tr>
+                    <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">日期</th>
+                    <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">星期</th>
+                    <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">任務 / 事件</th>
+                    <th className="p-4 font-semibold text-amber-900 dark:text-amber-400 whitespace-nowrap">備註</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100 dark:divide-slate-700">
+                  {tasks.map((task, index) => {
+                    const showDate = index === 0 || tasks[index - 1].date !== task.date;
+                    return (
+                      <tr key={index} className="hover:bg-amber-50/70 dark:hover:bg-slate-700/50 print:break-inside-avoid">
+                        <td className="p-4 align-top">
+                          {showDate && (
+                            <div className="font-semibold text-gray-900 dark:text-slate-200 whitespace-nowrap">{task.date}</div>
+                          )}
+                        </td>
+                        <td className="p-4 align-top">
+                          {showDate && (
+                             <div className="text-gray-900 dark:text-slate-200">{task.day}</div>
+                          )}
+                        </td>
+                        <td className={`p-4 align-top font-medium ${task.highlight || 'text-gray-800 dark:text-slate-300'}`}>
+                          <div>{task.task}</div>
+                        </td>
+                        <td className={`p-4 align-top ${task.highlight?.includes('red') ? 'font-bold text-red-700 dark:text-red-500' : 'text-gray-800 dark:text-slate-300'}`}>
+                          <div style={{ whiteSpace: 'pre-wrap' }}>{task.notes}</div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+       </div>
     </section>
   );
 };
@@ -1053,270 +1112,384 @@ const App = () => {
     { id: 'spec-tooling', title: 'Tooling & Fixture Spec', items: { 'Test Fixture ID': 'Enter ID', 'Assembly Jig': 'Enter details', 'Stencil Thickness': 'e.g., 0.12mm' } },
     { id: 'spec-regulatory', title: 'Regulatory Compliance', items: { 'RoHS': 'Compliant / Non-compliant', 'FCC / CE': 'Required / Not Required' } },
     { id: 'spec-assembly', title: 'Assembly Spec', items: { 'torque': 'New Value', 'Assembly Jig': 'New Value' } },
-    { id: 'spec-dip-general', title: 'DIP Spec', items: { 'Total units': 'New Value', 'Top side': 'New Value', 'Bottom side': 'New Value' } },
-    { id: 'spec-aoi-inspection', title: 'AOI Inspection Spec', items: { 'Inspection Coverage': 'SMT components' } },
-    { id: 'spec-aoi-photo', title: 'AOI Photo Spec', items: { 'Resolution': 'e.g., 10 megapixels', 'Lighting': 'e.g., Coaxial, Side', 'File Format': 'e.g., JPEG, PNG' } },
-    { id: 'spec-wash', title: 'Wash Spec', items: { 'Cycle': 'New Value', 'Temperature': 'New Value', 'Time': 'New Value' } }
+    { id: 'spec-dip-general', title: 'DIP Spec', items: {} }
   ];
   const initialProcessSteps = [
-    { id: 'step-1', name: '建BOM', details: 'Bill of Materials creation and finalization.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-2', name: '料到', details: 'Receiving and incoming inspection of all components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-3', name: 'PCB到', details: 'Receiving and incoming inspection of bare PCBs.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-pcb' },
-    { id: 'step-4', name: 'SMT', details: 'Surface Mount Technology assembly process.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-smt' },
-    { id: 'step-6', name: 'PF', details: 'Press-fit component assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-general' },
-    { id: 'step-7', name: '手焊', details: 'Manual soldering of specific components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
-    { id: 'step-9', name: '插件', details: 'manually Insertion', type: 'process', isActive:true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
-    { id: 'step-8', name: '水洗', details: 'Washing, Cleaning PCBA to remove flux and contaminants.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-wash' },
-    { id: 'step-5', name: 'SMT 目檢', details: 'Visual inspection of SMT components and solder joints.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-aoi-inspection' },
-    { id: 'step-10', name: 'FPT', details: 'Fly Probe testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
-    { id: 'step-11', name: 'QC', details: 'Final quality control checks.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
-    { id: 'step-12', name: 'AOI 拍照', details: 'Automated Optical Inspection and photography for documentation.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-aoi-photo' },
-    { id: 'step-13', name: 'Pack', details: 'Prepare and package the final product for shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-packaging' },
-    { id: 'step-14', name: '出貨 (Shipping)', details: 'Final product shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-aoi-inspect', name: 'AOI Inspection', details: 'Automated Optical Inspection of SMT assembly.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-aoi-inspection' },
-    { id: 'step-15', name: 'DIP', details: 'Through-hole component insertion.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
-    { id: 'step-16', name: 'Function Test', details: 'Comprehensive functional testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
+    { id: 'step-bom', name: 'BOM 確認', details: 'Bill of Materials creation and finalization.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-receiving', name: '料到', details: 'Receiving and incoming inspection of all components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-pcb', name: 'PCB到', details: 'Receiving and incoming inspection of bare PCBs. (WITH SAMPLE?)', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-pcb' },
+    { id: 'step-smt', name: 'SMT', details: 'Surface Mount Technology assembly process.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-smt' },
+    { id: 'step-aoi', name: 'SMT 目檢', details: 'Visual inspection of SMT components and solder joints.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
+    { id: 'step-pressfit', name: '壓合', details: 'Press-fit component assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-assembly' },
+    { id: 'step-dip', name: '插件', details: 'Through-hole component insertion.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-general' },
+    { id: 'step-manual-solder', name: '手焊', details: 'Manual soldering of specific components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
+    { id: 'step-wash', name: '水洗', details: 'Washing, Cleaning PCBA to remove flux and contaminants.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-fw-flash', name: '燒錄', details: 'Firmware flashing and verification.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-firmware' },
+    { id: 'step-ict', name: '飛針', details: 'Fly Probe testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-tooling' },
+    { id: 'step-assy', name: '組裝', details: 'Final product assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-mechanical' },
+    { id: 'step-final-test', name: '成品測試', details: 'Final functional testing of the assembled product.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
+    { id: 'step-qc', name: 'QC', details: 'Final quality control inspection.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
+    { id: 'step-pack', name: '包裝', details: 'Packaging for shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-packaging' }
   ];
-  const initialAttendees = [];
-  const initialAppTitle = '試產會議';
-  const initialProcessFlowTitle = 'Manufacturing Process Flow';
-  const initialMeetingDate = new Date().toISOString().split('T')[0];
 
-  const loadState = () => {
-      try {
-          const serializedState = localStorage.getItem(LOCAL_STORAGE_KEY);
-          if (serializedState === null) return undefined;
-          return JSON.parse(serializedState);
-      } catch (err) { console.error("Could not load state", err); return undefined; }
-  };
-  const saveState = (state) => {
-      try {
-          const serializedState = JSON.stringify(state);
-          localStorage.setItem(LOCAL_STORAGE_KEY, serializedState);
-      } catch (err) { console.error("Could not save state", err); }
+  const getInitialState = () => {
+    try {
+      const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (savedState) {
+        const parsed = JSON.parse(savedState);
+        // Basic validation
+        if(parsed.projectDetails && parsed.specs && parsed.processSteps) {
+            return {
+                appTitle: parsed.appTitle || "NPI Meeting Board",
+                projectName: parsed.projectName || "New Project",
+                projectDetails: parsed.projectDetails,
+                specs: parsed.specs,
+                processSteps: parsed.processSteps,
+                attendees: parsed.attendees || [],
+                meetingDate: parsed.meetingDate || new Date().toISOString().slice(0, 10),
+            };
+        }
+      }
+    } catch (error) {
+      console.error("Failed to parse state from localStorage:", error);
+    }
+    // Return default state if anything fails
+    return {
+      appTitle: "NPI Meeting Board",
+      projectName: "New Project",
+      projectDetails: initialProjectDetails,
+      specs: initialSpecs,
+      processSteps: initialProcessSteps,
+      attendees: [],
+      meetingDate: new Date().toISOString().slice(0, 10),
+    };
   };
 
-  const savedState = loadState();
-  const [appTitle, setAppTitle] = useState(savedState?.appTitle || initialAppTitle);
-  const [activeTab, setActiveTab] = useState('總覽與時程 (Overview & Schedule)');
-  const [projectDetails, setProjectDetails] = useState(savedState?.projectDetails || initialProjectDetails);
-  const [specs, setSpecs] = useState(savedState?.specs || initialSpecs);
-  const [processSteps, setProcessSteps] = useState(savedState?.processSteps || initialProcessSteps);
-  const [processFlowTitle, setProcessFlowTitle] = useState(savedState?.processFlowTitle || initialProcessFlowTitle);
-  const [attendees, setAttendees] = useState(savedState?.attendees || initialAttendees);
-  const [meetingDate, setMeetingDate] = useState(savedState?.meetingDate || initialMeetingDate);
+  const [appTitle, setAppTitle] = useState(getInitialState().appTitle);
+  const [projectName, setProjectName] = useState(getInitialState().projectName);
+  const [projectDetails, setProjectDetails] = useState(getInitialState().projectDetails);
+  const [specs, setSpecs] = useState(getInitialState().specs);
+  const [processSteps, setProcessSteps] = useState(getInitialState().processSteps);
+  const [activeTab, setActiveTab] = useState('Overview');
+  const [attendees, setAttendees] = useState(getInitialState().attendees);
+  const [meetingDate, setMeetingDate] = useState(getInitialState().meetingDate);
+  const [processFlowTitle, setProcessFlowTitle] = useState("Manufacturing Process Flow");
+
 
   useEffect(() => {
-    const stateToSave = { appTitle, projectDetails, specs, processSteps, processFlowTitle, attendees, meetingDate };
-    saveState(stateToSave);
-  }, [appTitle, projectDetails, specs, processSteps, processFlowTitle, attendees, meetingDate]);
-
-  const TABS = ['總覽與時程 (Overview & Schedule)', '規格與流程 (Specs & Process Flow)', '與會人員 (Attendees)'];
-
-  const handleAppTitleChange = (newTitle) => setAppTitle(newTitle);
-  const handleProjectNameChange = (newName) => setProjectDetails(prev => ({ ...prev, id: newName }));
-  const handleDetailChange = (key, value) => setProjectDetails(prev => ({ ...prev, [key]: key === 'quantity' ? Number(value) || 0 : value }));
-  const handleSpecChange = (specId, itemKey, value) => {
-    setSpecs(prev => prev.map(spec => {
-      if (spec.id === specId) {
-        if (itemKey === 'title') return { ...spec, title: String(value) };
-        return { ...spec, items: { ...spec.items, [itemKey]: value } };
-      }
-      return spec;
-    }));
-  };
-  const handleSpecItemKeyChange = (specId, oldKey, newKey) => {
-    if (!newKey || oldKey === newKey) return;
-    setSpecs(prev => prev.map(spec => {
-      if (spec.id === specId) {
-        const newItems = {};
-        for (const [key, value] of Object.entries(spec.items)) {
-            newItems[key === oldKey ? newKey : key] = value;
-        }
-        return { ...spec, items: newItems };
-      }
-      return spec;
-    }));
-  };
-  const handleAddSpec = () => {
-    const newSpec = { id: crypto.randomUUID(), title: 'New Spec', items: {} };
-    setSpecs(prev => [...prev, newSpec]);
-  };
-  const handleAddSpecItem = (specId) => {
-    setSpecs(prev => prev.map(spec => {
-      if (spec.id === specId) {
-        let i = 1; let newKey = `Parameter ${i}`;
-        while (Object.prototype.hasOwnProperty.call(spec.items, newKey)) { newKey = `Parameter ${++i}`; }
-        return { ...spec, items: { ...spec.items, [newKey]: 'New Value' } };
-      }
-      return spec;
-    }));
-  };
-  const handleDeleteSpecItem = (specId, itemKey) => {
-    setSpecs(prev => prev.map(spec => {
-      if (spec.id === specId) {
-        const newItems = { ...spec.items }; delete newItems[itemKey];
-        return { ...spec, items: newItems };
-      }
-      return spec;
-    }));
-  };
-  const handleDeleteSpec = (specId) => {
-    setProcessSteps(prev => prev.map(step => step.relatedSpecId === specId ? { ...step, relatedSpecId: null } : step));
-    setSpecs(prev => prev.filter(spec => spec.id !== specId));
-  };
-  const handleReorderSpecs = (newSpecs) => setSpecs(newSpecs);
-  const handleStepChange = (stepId, key, value) => setProcessSteps(prev => prev.map(step => (step.id === stepId ? { ...step, [key]: value } : step)));
-  const handleBulkStepDateChange = (stepIds, key, value) => setProcessSteps(prev => prev.map(step => stepIds.includes(step.id) ? { ...step, [key]: value } : step));
-  const handleLinkStepToSpec = (stepId, specId) => setProcessSteps(prev => prev.map(step => step.id === stepId ? { ...step, relatedSpecId: specId } : step));
-  const handleAddStep = () => {
-    const newStep = { id: crypto.randomUUID(), name: 'New Step', details: 'Click to edit details for the new step.', type: 'process', isActive: true, startDate: '', endDate: '' };
-    setProcessSteps(prev => [...prev, newStep]);
-  };
-  const handleDeleteStep = (stepId) => setProcessSteps(prev => prev.filter(step => step.id !== stepId));
-  const handleToggleStep = (stepId) => setProcessSteps(prev => prev.map(step => step.id === stepId ? { ...step, isActive: !step.isActive } : step));
-  const handleReorderSteps = (newSteps) => setProcessSteps(newSteps);
-  const handleProcessFlowTitleChange = (newTitle) => setProcessFlowTitle(newTitle);
-  const handleAttendeesChange = (value) => setAttendees(value.split('\n').filter(name => name.trim() !== ''));
-  const handleMeetingDateChange = (newDate) => setMeetingDate(newDate);
-
-  const scheduleTasks = useMemo(() => {
-    const dayFormatter = new Intl.DateTimeFormat('zh-TW-u-ca-chinese', { weekday: 'short' });
-    const getDay = (dateStr) => {
-        try { const date = new Date(dateStr + 'T00:00:00'); if (isNaN(date.getTime())) return '-'; return dayFormatter.format(date).replace('週', ''); } catch { return '-'; }
+    const stateToSave = {
+      appTitle,
+      projectName,
+      projectDetails,
+      specs,
+      processSteps,
+      attendees,
+      meetingDate
     };
-    const derivedTasks = processSteps
-      .filter(step => step.isActive && step.startDate)
-      .flatMap(step => {
-        const tasksForStep = [];
-        try {
-            if (!step.startDate) return []; // Must have a start date
-
-            // Extract date part only to avoid time influencing the day range
-            const startDateStr = step.startDate.split('T')[0];
-            const endDateStr = step.endDate ? step.endDate.split('T')[0] : startDateStr;
-
-            // new Date('YYYY-MM-DD') creates a date at midnight UTC. This avoids timezone issues.
-            const start = new Date(startDateStr);
-            const end = new Date(endDateStr);
-
-            if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return [];
-            
-            const baseNote = () => {
-                let note = step.details;
-                if (step.relatedSpecId) {
-                    const spec = specs.find(s => s.id === step.relatedSpecId);
-                    if (spec && Object.keys(spec.items).length > 0) {
-                        note += ` | Related Spec: ${spec.title} | ${Object.entries(spec.items).map(([key, value]) => `${key}: ${String(value)}`).join('; ')}`;
-                    }
-                }
-                
-                const startTime = step.startDate?.split('T')[1]?.substring(0,5);
-                const endTime = step.endDate?.split('T')[1]?.substring(0,5);
-                
-                if (startTime && endTime) {
-                    note += ` (${startTime} - ${endTime})`;
-                } else if (startTime) {
-                    note += ` (Starts at ${startTime})`;
-                }
-
-                return note;
-            };
-
-            const durationInDays = Math.round((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
-            let dayCounter = 1;
-            
-            for (let d = new Date(start.getTime()); d.getTime() <= end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
-                const note = dayCounter === 1
-                    ? baseNote()
-                    : `${baseNote()} (Day ${dayCounter} of ${durationInDays})`;
-                
-                tasksForStep.push({ date: d.toISOString().split('T')[0], day: getDay(d.toISOString().split('T')[0]), task: step.name, notes: note, ganttGroup: step.type });
-                dayCounter++;
-            }
-        } catch { return []; }
-        return tasksForStep;
-      });
-
-    const allTasks = [...derivedTasks];
-    if (projectDetails.targetShipDate) {
-        allTasks.push({ date: projectDetails.targetShipDate, day: getDay(projectDetails.targetShipDate), task: '目標出貨 (Target Ship Date)', notes: `Final shipment for ${projectDetails.quantity} pcs.`, highlight: 'text-red-700 font-bold', ganttGroup: 'Shipment' });
+    try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch (error) {
+        console.error("Failed to save state to localStorage:", error);
     }
-    return allTasks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [processSteps, specs, projectDetails.targetShipDate, projectDetails.quantity]);
-
-  const ganttTasks = useMemo(() => {
-    return processSteps
-      .filter(step => step.isActive && step.startDate && step.endDate)
-      .map(step => {
-        const start = new Date(step.startDate);
-        const end = new Date(step.endDate);
-        return { name: step.name, start: start, end: end.getHours() === 0 && end.getMinutes() === 0 ? new Date(end.getTime() + 24 * 60 * 60 * 1000 - 1) : end };
-      })
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [processSteps]);
-
-  const handleSaveAsPdf = () => window.print();
+  }, [appTitle, projectName, projectDetails, specs, processSteps, attendees, meetingDate]);
 
   const handleReset = () => {
-    if (window.confirm('Are you sure you want to reset all data to the default template? This action cannot be undone.')) {
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      window.location.reload();
+    if (window.confirm("Are you sure you want to reset all data? This cannot be undone.")) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        setAppTitle("NPI Meeting Board");
+        setProjectName("New Project");
+        setProjectDetails(initialProjectDetails);
+        setSpecs(initialSpecs);
+        setProcessSteps(initialProcessSteps);
+        setAttendees([]);
+        setMeetingDate(new Date().toISOString().slice(0, 10));
+        setActiveTab('Overview');
     }
   };
+  
+  const handleSaveAsPdf = () => {
+    document.title = `${projectName}_${projectDetails.id}_NPI_Plan_${new Date().toISOString().slice(0,10)}`;
+    window.print();
+  };
 
+  const handleProjectDetailChange = (key, value) => {
+    setProjectDetails(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSpecChange = (specId, itemKey, newValue) => {
+    setSpecs(prevSpecs => prevSpecs.map(spec => {
+      if (spec.id === specId) {
+        if (itemKey === 'title') {
+            return { ...spec, title: String(newValue) };
+        }
+        return { ...spec, items: { ...spec.items, [itemKey]: newValue } };
+      }
+      return spec;
+    }));
+  };
+  
+  const handleAddSpecItem = (specId) => {
+    let newKey = 'New Parameter';
+    let counter = 1;
+    const existingKeys = specs.find(s => s.id === specId)?.items || {};
+    while (Object.keys(existingKeys).includes(newKey)) {
+        newKey = `New Parameter ${counter++}`;
+    }
+    handleSpecChange(specId, newKey, 'Enter value');
+  };
+
+  const handleDeleteSpecItem = (specId, itemKey) => {
+    setSpecs(prevSpecs => prevSpecs.map(spec => {
+        if (spec.id === specId) {
+            const newItems = { ...spec.items };
+            delete newItems[itemKey];
+            return { ...spec, items: newItems };
+        }
+        return spec;
+    }));
+  };
+
+  const handleSpecItemKeyChange = (specId, oldKey, newKey) => {
+    if (!newKey || oldKey === newKey) return;
+    setSpecs(prevSpecs => prevSpecs.map(spec => {
+        if (spec.id === specId) {
+            const itemsArray = Object.entries(spec.items);
+            const itemIndex = itemsArray.findIndex(([k, v]) => k === oldKey);
+            if (itemIndex > -1) {
+                itemsArray[itemIndex][0] = newKey;
+                const newItems = Object.fromEntries(itemsArray);
+                return { ...spec, items: newItems };
+            }
+        }
+        return spec;
+    }));
+  };
+
+  const handleAddSpec = () => {
+    const newSpec = {
+        id: `spec-${Date.now()}`,
+        title: 'New Specification',
+        items: { 'Parameter 1': 'Value 1' }
+    };
+    setSpecs(prev => [...prev, newSpec]);
+  };
+  
+  const handleDeleteSpec = (specId) => {
+    // Also unlink from any process steps
+    setProcessSteps(prev => prev.map(step => 
+      step.relatedSpecId === specId ? { ...step, relatedSpecId: null } : step
+    ));
+    setSpecs(prev => prev.filter(s => s.id !== specId));
+  };
+
+  const handleProcessStepChange = (stepId, key, value) => {
+    setProcessSteps(prev => prev.map(step => 
+      step.id === stepId ? { ...step, [key]: value } : step
+    ));
+  };
+  
+  const handleBulkStepDateChange = (stepIds, key, value) => {
+    setProcessSteps(prev => prev.map(step => 
+        stepIds.includes(step.id) ? { ...step, [key]: value } : step
+    ));
+  };
+  
+  const handleToggleStep = (stepId) => {
+    setProcessSteps(prev => prev.map(step => 
+      step.id === stepId ? { ...step, isActive: !step.isActive } : step
+    ));
+  };
+  
+  const handleAddStep = () => {
+    const newStep = {
+        id: `step-${Date.now()}`,
+        name: 'New Step',
+        details: '',
+        type: 'process',
+        isActive: true,
+        startDate: '',
+        endDate: '',
+        relatedSpecId: null
+    };
+    const activeSteps = processSteps.filter(s => s.isActive);
+    const inactiveSteps = processSteps.filter(s => !s.isActive);
+    setProcessSteps([...activeSteps, newStep, ...inactiveSteps]);
+  };
+  
+  const handleDeleteStep = (stepId) => {
+    setProcessSteps(prev => prev.filter(s => s.id !== stepId));
+  };
+  
+  const handleReorderSteps = (reorderedStepsWithInactive) => {
+    setProcessSteps(reorderedStepsWithInactive);
+  };
+  
+  const handleReorderSpecs = (newSpecs) => {
+    setSpecs(newSpecs);
+  };
+
+  const handleLinkStepToSpec = (stepId, specId) => {
+     handleProcessStepChange(stepId, 'relatedSpecId', specId);
+  };
+
+  const handleAttendeesChange = (value) => {
+    setAttendees(value.split('\n'));
+  };
+
+  const scheduleTasks = useMemo(() => {
+    return processSteps
+      .filter(step => step.isActive && step.startDate && step.endDate)
+      .flatMap(step => {
+          const tasks = [];
+          let current = new Date(step.startDate);
+          const end = new Date(step.endDate);
+          
+          while (current <= end) {
+              const dateStr = current.toISOString().slice(0, 10);
+              const dayOfWeek = current.toLocaleDateString('zh-TW', { weekday: 'short' }).replace('週','');
+              
+              const startTime = current.getHours() === 0 && current.getMinutes() === 0 ? new Date(step.startDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : current.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+              
+              const endTime = new Date(step.endDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+              const relatedSpec = step.relatedSpecId ? specs.find(s => s.id === step.relatedSpecId) : null;
+              
+              let notes = `${step.details} (${startTime} - ${endTime})`;
+              if (relatedSpec) {
+                const specDetails = Object.entries(relatedSpec.items).map(([k,v]) => `${k}: ${v}`).join('; ');
+                notes += ` | Related Spec: ${relatedSpec.title} | ${specDetails}`;
+              }
+
+              tasks.push({
+                  date: dateStr,
+                  day: dayOfWeek,
+                  task: step.name,
+                  notes: notes,
+                  ganttGroup: step.name, // Each step is its own group for detailed Gantt
+              });
+
+              current.setDate(current.getDate() + 1);
+              current.setHours(0, 0, 0, 0); // Start next day at midnight
+          }
+          return tasks;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [processSteps, specs]);
+
+  const ganttTasks = useMemo(() => {
+    const taskGroups = scheduleTasks.reduce((acc, task) => {
+      acc[task.ganttGroup] = acc[task.ganttGroup] || [];
+      acc[task.ganttGroup].push(new Date(task.date));
+      return acc;
+    }, {});
+
+    return Object.entries(taskGroups).map(([name, dates]) => {
+      const start = new Date(Math.min(...dates));
+      const end = new Date(Math.max(...dates));
+      return { name, start, end };
+    }).sort((a,b) => a.start.getTime() - b.start.getTime());
+  }, [scheduleTasks]);
+
+  const tabs = ['Overview', 'Specs', 'Process Flow', 'Schedule', 'Attendees'];
+  
   return (
-    <div className="min-h-screen p-4 sm:p-6 md:p-8">
-      <div className="max-w-7xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-lg p-4 sm:p-6 md:p-8 border border-amber-200 dark:border-slate-700 print-container">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 print-container">
         <Header 
-            projectName={projectDetails.id} 
-            onProjectNameChange={handleProjectNameChange} 
-            onSaveAsPdf={handleSaveAsPdf} 
-            appTitle={appTitle} 
-            onAppTitleChange={handleAppTitleChange}
+            appTitle={appTitle}
+            onAppTitleChange={setAppTitle}
+            projectName={projectName} 
+            onProjectNameChange={setProjectName} 
+            onSaveAsPdf={handleSaveAsPdf}
             onReset={handleReset}
         />
-        <Tabs tabs={TABS} activeTab={activeTab} onTabClick={setActiveTab} />
         <main>
-          <div className={activeTab === '總覽與時程 (Overview & Schedule)' ? '' : 'hidden print-show'}>
-             <TabContentWrapper title="總覽 (Overview)" isFirstPrintSection={true}>
-                <OverviewTab details={projectDetails} tasks={ganttTasks} onDetailChange={handleDetailChange} />
+          <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
+          <div className="tab-content mt-6">
+            <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
+              <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
+                <OverviewTab details={projectDetails} tasks={ganttTasks} onDetailChange={handleProjectDetailChange} />
+              </TabContentWrapper>
+            </div>
+            <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
+              <TabContentWrapper title="技術規格 (Specifications)">
+                <SpecsTab 
+                    specs={specs} 
+                    onSpecChange={handleSpecChange}
+                    onAddSpec={handleAddSpec}
+                    onDeleteSpec={handleDeleteSpec}
+                    onAddSpecItem={handleAddSpecItem}
+                    onDeleteSpecItem={handleDeleteSpecItem}
+                    onSpecItemKeyChange={handleSpecItemKeyChange}
+                    onReorderSpecs={handleReorderSpecs}
+                />
+              </TabContentWrapper>
+            </div>
+             <div className={activeTab !== 'Process Flow' ? 'hidden' : ''}>
+                <TabContentWrapper title="製程與流程 (Process Flow)">
+                    <ProcessFlowTab 
+                        steps={processSteps}
+                        specs={specs}
+                        projectId={projectDetails.id}
+                        title={processFlowTitle}
+                        onTitleChange={setProcessFlowTitle}
+                        onStepChange={handleProcessStepChange}
+                        onBulkStepDateChange={handleBulkStepDateChange}
+                        onAddStep={handleAddStep}
+                        onDeleteStep={handleDeleteStep}
+                        onToggleStep={handleToggleStep}
+                        onReorderSteps={handleReorderSteps}
+                        onLinkStepToSpec={handleLinkStepToSpec}
+                    />
+                </TabContentWrapper>
+             </div>
+             <div className={activeTab !== 'Schedule' ? 'hidden' : ''}>
+                <TabContentWrapper title="時程與任務 (Schedule)">
+                    <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
+                </TabContentWrapper>
+             </div>
+             <div className={activeTab !== 'Attendees' ? 'hidden' : ''}>
+                 <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
+                    <AttendeesTab 
+                        attendees={attendees} 
+                        onAttendeesChange={handleAttendeesChange} 
+                        date={meetingDate}
+                        onDateChange={setMeetingDate}
+                    />
+                </TabContentWrapper>
+             </div>
+          </div>
+          
+          <div className="hidden print:block space-y-12">
+            <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
+                <OverviewTab details={projectDetails} tasks={ganttTasks} onDetailChange={handleProjectDetailChange} />
             </TabContentWrapper>
-            <TabContentWrapper title="時程與任務 (Schedule)">
+            <TabContentWrapper title="會議與人員 (Meeting & Attendees)">
+                <AttendeesTab attendees={attendees} onAttendeesChange={() => {}} date={meetingDate} onDateChange={() => {}} />
+            </TabContentWrapper>
+            <TabContentWrapper title="技術規格 (Specifications)">
+                <SpecsTab specs={specs} onSpecChange={() => {}} onAddSpec={() => {}} onDeleteSpec={() => {}} onAddSpecItem={() => {}} onDeleteSpecItem={() => {}} onSpecItemKeyChange={() => {}} onReorderSpecs={() => {}} />
+            </TabContentWrapper>
+             <TabContentWrapper title="時程與任務 (Schedule)">
                 <ScheduleTab tasks={scheduleTasks} onTaskChange={() => {}} />
             </TabContentWrapper>
           </div>
-          <div className={activeTab === '規格與流程 (Specs & Process Flow)' ? '' : 'hidden print-show'}>
-            <TabContentWrapper title="流程 (Process Flow)" className="no-print">
-               <ProcessFlowTab steps={processSteps} specs={specs} projectId={projectDetails.id} title={processFlowTitle} onTitleChange={handleProcessFlowTitleChange} onStepChange={handleStepChange} onBulkStepDateChange={handleBulkStepDateChange} onAddStep={handleAddStep} onDeleteStep={handleDeleteStep} onToggleStep={handleToggleStep} onReorderSteps={handleReorderSteps} onLinkStepToSpec={handleLinkStepToSpec} />
-            </TabContentWrapper>
-            <TabContentWrapper title="規格 (Specs)" className="no-print">
-              <SpecsTab specs={specs} onSpecChange={handleSpecChange} onAddSpec={handleAddSpec} onDeleteSpec={handleDeleteSpec} onAddSpecItem={handleAddSpecItem} onDeleteSpecItem={handleDeleteSpecItem} onSpecItemKeyChange={handleSpecItemKeyChange} onReorderSpecs={handleReorderSpecs} />
-            </TabContentWrapper>
-          </div>
-          <div className={activeTab === '與會人員 (Attendees)' ? '' : 'hidden print-show'}>
-             <TabContentWrapper title="與會人員 (Attendees)">
-                <AttendeesTab attendees={attendees} onAttendeesChange={handleAttendeesChange} date={meetingDate} onDateChange={handleMeetingDateChange} />
-            </TabContentWrapper>
-          </div>
         </main>
-        <footer className="text-center text-xs text-gray-400 dark:text-slate-500 mt-8">
-            ver-0.7
-        </footer>
-      </div>
     </div>
   );
 };
-    // Final Render call from index.tsx
-    const rootElement = document.getElementById('root');
-    if (rootElement) {
-        const root = ReactDOM.createRoot(rootElement);
-        root.render(
-            <React.StrictMode>
-                <App />
-            </React.StrictMode>
-        );
-    }
-</script>
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+// Register Service Worker for PWA/offline functionality
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').then(registration => {
+      console.log('ServiceWorker registration successful with scope: ', registration.scope);
+    }, err => {
+      console.log('ServiceWorker registration failed: ', err);
+    });
+  });
+}
+    </script>
 </body>
 </html>
