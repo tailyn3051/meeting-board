@@ -21,7 +21,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
-        /* Custom print styles to ensure proper rendering */
+        /* Custom print styles for WYSIWYG output */
         @media print {
           body {
             -webkit-print-color-adjust: exact;
@@ -38,7 +38,7 @@
           .print-container {
             box-shadow: none !important;
             border: none !important;
-            padding: 1cm !important;
+            padding: 0 !important;
             margin: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
@@ -46,51 +46,62 @@
             background: transparent !important;
             border-radius: 0 !important;
           }
-          .print-show {
-            display: block !important;
-            visibility: visible !important;
-          }
           .shadow-md, .shadow-lg, .shadow-inner {
             box-shadow: none !important;
-          }
-          .border, .border-b, .border-amber-100, .border-amber-200 {
-            border-color: #ccc !important;
           }
           h1, h2, h3 {
             page-break-after: avoid;
           }
-          .print-break-before-page {
-            break-before: page;
-          }
           .print-break-inside-avoid {
             break-inside: avoid;
           }
-          h1, h2, h3, h4 {
-            color: #000 !important;
+
+          /* --- WYSIWYG Print Styles --- */
+          
+          /* Remove fixed heights to allow content to flow across pages */
+          .h-\[75vh\], .min-h-\[200px\], .min-h-\[150px\], .min-h-\[120px\] {
+            height: auto !important;
+            min-height: auto !important;
           }
-          h2 {
-            font-size: 16pt;
-            border-color: #ccc !important;
+
+          /* Handle the Schedule Timeline for printing */
+          .overflow-x-auto {
+            overflow: visible !important;
           }
-          h3 {
-            font-size: 11pt;
+          .min-w-max {
+            /* Allows timeline columns to wrap onto new lines on the page */
+            display: flex;
+            flex-wrap: wrap !important;
+            min-width: 0 !important;
+            justify-content: flex-start;
           }
-          p, li, td, th, span {
-            font-size: 9pt;
+          .flex-shrink-0 {
+             /* Allow columns to shrink if needed, though wrap is preferred */
+            flex-shrink: 1 !important;
           }
-          .card-print-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
+
+          /* On Overview tab, stack columns vertically instead of side-by-side */
+          .lg\:flex-row {
+            flex-direction: column !important;
           }
-          table {
-            width: 100%;
+          .lg\:w-1\/4, .lg\:w-3\/4, .xl\:w-1\/5, .xl\:w-4\/5 {
+            width: 100% !important;
           }
-          .print-card {
-            box-shadow: none !important;
-            border: 1px solid #ccc !important;
-            background: #fff !important;
-            padding: 0.5rem !important;
+           /* Remove spacing between stacked columns */
+          .lg\:space-x-6 > :not([hidden]) ~ :not([hidden]) {
+            --tw-space-x-reverse: 0;
+            margin-right: calc(0px * var(--tw-space-x-reverse));
+            margin-left: calc(0px * calc(1 - var(--tw-space-x-reverse)));
+          }
+          .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+             --tw-space-y-reverse: 0;
+             margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
+             margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
+          }
+          .lg\:space-y-0 {
+             --tw-space-y-reverse: 0;
+             margin-top: calc(0px * calc(1 - var(--tw-space-y-reverse)));
+             margin-bottom: calc(0px * var(--tw-space-y-reverse));
           }
         }
     </style>
@@ -353,7 +364,7 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
 // --- From components/Header.tsx ---
 const Header = ({ projectName, onProjectNameChange, onSaveAsPdf, appTitle, onAppTitleChange, onReset }) => {
     return (
-        <header className="mb-6">
+        <header className="mb-6 print:break-after-page">
             <div className="flex justify-between items-start">
                 <div>
                     <EditableField
@@ -545,7 +556,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                             key={date}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleColumnDrop(e, date)}
-                            className={`w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full`}
+                            className={`w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full print:break-inside-avoid`}
                         >
                             <div className="p-3 bg-amber-100 dark:bg-slate-700 rounded-t-xl border-b border-amber-200 dark:border-slate-600 sticky top-0 z-10">
                                 <h3 className="font-bold text-lg text-amber-900 dark:text-amber-400">{date}</h3>
@@ -947,7 +958,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
       <p className="text-base text-gray-700 dark:text-slate-300">This is the complete manufacturing and quality control flow for {projectId}. Drag steps to reorder, click the status icon to activate/deactivate, double-click names to edit, or click a step to view details. Use <strong>Ctrl/Cmd + Click</strong> to select multiple steps.</p>
       <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
         <EditableField as="h2" initialValue={title} onSave={onTitleChange} className="text-xl font-semibold mb-12 text-amber-900 dark:text-amber-400 text-center" inputClassName="text-xl font-semibold text-center" />
-        <div className="flex flex-wrap items-center justify-center gap-2 py-4 print:hidden">
+        <div className="flex flex-wrap items-center justify-center gap-2 py-4">
           {activeSteps.map((step, index) => <ActiveStepNode key={step.id} step={step} index={index} totalActiveSteps={activeSteps.length} />)}
            <button onClick={onAddStep} className="ml-2 h-12 w-40 flex items-center justify-center rounded-md border-2 border-dashed border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 font-semibold cursor-pointer transition-all duration-200 ease-in-out hover:bg-green-100 dark:hover:bg-green-500/20 hover:border-green-500 dark:hover:border-green-500 no-print">Add Step +</button>
         </div>
@@ -1110,17 +1121,17 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
             </p>
             
             {/* 1. Project Detail Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 card-print-grid">
-                <Card title="專案料號" className="print-card">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card title="專案料號">
                     <EditableField initialValue={details.id} onSave={(value) => onDetailChange('id', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
                 </Card>
-                <Card title="試產數量" className="print-card">
+                <Card title="試產數量">
                     <EditableField initialValue={`${details.quantity} pcs`} onSave={(value) => onDetailChange('quantity', value.replace(' pcs', '').trim())} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
                 </Card>
-                <Card title="PCB 尺寸 (mm)" className="print-card">
+                <Card title="PCB 尺寸 (mm)">
                     <EditableField initialValue={details.pcbSize} onSave={(value) => onDetailChange('pcbSize', value)} className="text-xl font-semibold text-amber-900 dark:text-amber-400" />
                 </Card>
-                <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20 print-card">
+                <Card title="目標出貨日" className="border-red-100 dark:border-red-500/20">
                     <EditableField type="date" initialValue={details.targetShipDate} onSave={(value) => onDetailChange('targetShipDate', value)} className="text-xl font-semibold text-red-700 dark:text-red-500" />
                 </Card>
             </div>
@@ -1135,7 +1146,7 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
             </div>
             
             {/* 3. Specs and Schedule */}
-            <div className="flex flex-col lg:flex-row lg:space-x-6 space-y-6 lg:space-y-0 no-print">
+            <div className="flex flex-col lg:flex-row lg:space-x-6 space-y-6 lg:space-y-0">
                 {/* Left Column: Thinner Related Specs */}
                 <div className="lg:w-1/4 xl:w-1/5 flex-shrink-0">
                     <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Related Specs</h3>
@@ -1193,36 +1204,6 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                             onTaskReorder={onReorderStep}
                          />
                     </div>
-                </div>
-            </div>
-
-            <div className="hidden print:block">
-                <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Related Specifications</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {relatedSpecs.map(spec => (
-                     <div key={`print-spec-${spec.id}`} className="bg-white dark:bg-slate-800/50 p-4 rounded-lg border border-amber-100 dark:border-slate-700 print:border-gray-300 print:break-inside-avoid">
-                         <h4 className="font-semibold text-amber-800 dark:text-amber-400">{spec.title}</h4>
-                         <ul className="list-disc list-outside ml-5 mt-2 space-y-1 text-sm text-gray-700 dark:text-slate-300">
-                             {Object.entries(spec.items || {}).map(([key, value]) => (
-                                 <li key={key}><span className="font-medium">{key}:</span> {String(value)}</li>
-                             ))}
-                         </ul>
-                     </div>
-                  ))}
-                </div>
-                
-                <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">{processFlowTitle}</h3>
-                <ol className="list-decimal list-inside space-y-2">
-                    {activeSteps.map(step => (
-                        <li key={`print-overview-step-${step.id}`}>
-                            <strong>{step.name}:</strong> 
-                            <span className="text-gray-600 ml-2">{step.details}</span>
-                        </li>
-                    ))}
-                </ol>
-                <div>
-                    <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mt-8 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Detailed Schedule</h3>
-                    <SchedulePrintView tasks={scheduleTasks} />
                 </div>
             </div>
         </section>
@@ -1659,7 +1640,7 @@ const App = () => {
         />
         <main>
           <Tabs tabs={tabs} activeTab={activeTab} onTabClick={setActiveTab} />
-          <div className="tab-content mt-6 no-print">
+          <div className="tab-content mt-6">
             <div className={activeTab !== 'Overview' ? 'hidden' : ''}>
                 <OverviewTab 
                     details={projectDetails}
@@ -1719,11 +1700,12 @@ const App = () => {
              </div>
           </div>
           
-          <div className="hidden print:block space-y-12">
+          <div className="hidden">
+            {/* This was the old print-only view, it is now disabled in favor of WYSIWYG printing. */}
             <TabContentWrapper title="專案總覽 (Overview)" isFirstPrintSection>
                 <OverviewTab 
                     details={projectDetails} 
-                    onDetailChange={handleProjectDetailChange} 
+                    onDetailChange={() => {}} 
                     specs={specs} 
                     processSteps={processSteps} 
                     onReorderSpecs={() => {}} 
