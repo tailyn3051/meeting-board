@@ -505,25 +505,43 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
         setDragOverStepId(null);
     };
     
-    const handleDrop = (e, targetStepId) => {
+    const handleItemDrop = (e, targetStepId, targetDate) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent column drop handler from firing
         const draggedStepId = e.dataTransfer.getData('stepId');
         if (draggedStepId && targetStepId) {
-            onTaskReorder(draggedStepId, targetStepId);
+            onTaskReorder(draggedStepId, targetStepId, targetDate);
         }
         setDragOverStepId(null);
     };
+
+    const handleColumnDrop = (e, date) => {
+        e.preventDefault();
+        const draggedStepId = e.dataTransfer.getData('stepId');
+        const tasksOnDate = tasksByDate[date] || [];
+        // If dropping on column, target is the last item on that day for reordering purposes.
+        // If empty, target is null, which means just change date.
+        const lastTaskOnDate = tasksOnDate[tasksOnDate.length - 1];
+        const targetStepId = lastTaskOnDate ? lastTaskOnDate.stepId : null;
+        if (draggedStepId) {
+            // Avoid dropping on self if it's the only item in the column
+            if (tasksOnDate.length === 1 && tasksOnDate[0].stepId === draggedStepId) return;
+            onTaskReorder(draggedStepId, targetStepId, date);
+        }
+        setDragOverStepId(null);
+    };
+
 
     return (
         <div className={`overflow-x-auto pb-4 h-full ${className}`}>
             <div className="flex space-x-4 min-w-max h-full">
                 {sortedDates.map(date => {
                     const tasksOnDate = tasksByDate[date];
-                    const firstTask = tasksOnDate[0];
                     return (
                         <div 
                             key={date}
                             onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => handleColumnDrop(e, date)}
                             className={`w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full`}
                         >
                             <div className="p-3 bg-amber-100 dark:bg-slate-700 rounded-t-xl border-b border-amber-200 dark:border-slate-600 sticky top-0 z-10">
@@ -533,6 +551,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                             <div className="p-3 space-y-3 overflow-y-auto flex-1">
                                 {tasksOnDate.map((task) => {
                                     const timeRange = task.isMultiDay ? task.notes.match(/\(([^)]+)\)/)?.[1] || '' : `${task.startTime} - ${task.endTime}`;
+                                    const firstTask = tasksOnDate[0];
                                     return (
                                         <div 
                                             key={task.id} 
@@ -540,7 +559,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                                             onDragStart={(e) => handleDragStart(e, task.stepId)}
                                             onDragOver={(e) => handleDragOver(e, task.stepId)}
                                             onDragLeave={handleDragLeave}
-                                            onDrop={(e) => handleDrop(e, task.stepId)}
+                                            onDrop={(e) => handleItemDrop(e, task.stepId, date)}
                                             className={`bg-white dark:bg-slate-700 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${dragOverStepId === task.stepId ? 'ring-2 ring-blue-500' : ''}`}
                                             title={task.notes}
                                         >
@@ -1463,6 +1482,7 @@ const App = () => {
   };
 
   const formatToDateTimeLocal = (date) => {
+    if (!(date instanceof Date) || isNaN(date)) return '';
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
@@ -1501,29 +1521,54 @@ const App = () => {
     }
   };
 
-  const handleReorderProcessStep = (draggedStepId, targetStepId) => {
-    if (!draggedStepId || !targetStepId || draggedStepId === targetStepId) return;
+  const handleReorderProcessStep = (draggedStepId, targetStepId, newDateStr) => {
+    if (!draggedStepId || !newDateStr) return;
+    if (draggedStepId === targetStepId) return;
 
-    const allSteps = [...processSteps];
-    const draggedStep = allSteps.find(s => s.id === draggedStepId);
-    if (!draggedStep || !draggedStep.isActive) return;
+    setProcessSteps(prevSteps => {
+        let reorderedSteps = [...prevSteps];
 
-    const activeSteps = allSteps.filter(s => s.isActive);
-    const inactiveSteps = allSteps.filter(s => !s.isActive);
+        // --- Reorder active steps if a valid target is provided ---
+        if (targetStepId) {
+            const activeSteps = prevSteps.filter(s => s.isActive);
+            const inactiveSteps = prevSteps.filter(s => !s.isActive);
+            const draggedIndex = activeSteps.findIndex(s => s.id === draggedStepId);
+            let targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
+            if (draggedIndex !== -1 && targetIndex !== -1) {
+                const reorderedActiveSteps = [...activeSteps];
+                const [draggedItem] = reorderedActiveSteps.splice(draggedIndex, 1);
+                targetIndex = reorderedActiveSteps.findIndex(s => s.id === targetStepId);
+                reorderedActiveSteps.splice(targetIndex, 0, draggedItem); // Insert before target
+                reorderedSteps = [...reorderedActiveSteps, ...inactiveSteps];
+            }
+        }
+        
+        // --- Always update the date of the dragged step to the new column's date ---
+        const finalSteps = reorderedSteps.map(step => {
+            if (step.id === draggedStepId && step.startDate) {
+                const newStep = { ...step };
+                try {
+                    const oldStartDate = new Date(newStep.startDate);
+                    const oldEndDate = new Date(newStep.endDate);
+                    const duration = oldEndDate.getTime() - oldStartDate.getTime();
+                    
+                    const newStartDate = new Date(newDateStr);
+                    newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
+                    
+                    const newEndDate = new Date(newStartDate.getTime() + duration);
+                    
+                    newStep.startDate = formatToDateTimeLocal(newStartDate);
+                    newStep.endDate = formatToDateTimeLocal(newEndDate);
+                    return newStep;
+                } catch (e) {
+                    return step; // Return original on error
+                }
+            }
+            return step;
+        });
 
-    const draggedIndex = activeSteps.findIndex(s => s.id === draggedStepId);
-    let targetIndex = activeSteps.findIndex(s => s.id === targetStepId);
-    
-    if (draggedIndex === -1 || targetIndex === -1) return;
-    
-    const reorderedActiveSteps = [...activeSteps];
-    const [draggedItem] = reorderedActiveSteps.splice(draggedIndex, 1);
-    
-    targetIndex = reorderedActiveSteps.findIndex(s => s.id === targetStepId);
-    
-    reorderedActiveSteps.splice(targetIndex, 0, draggedItem);
-    
-    handleReorderSteps([...reorderedActiveSteps, ...inactiveSteps]);
+        return finalSteps;
+    });
 };
 
   const scheduleTasks = useMemo(() => {
@@ -1581,7 +1626,17 @@ const App = () => {
           }
           return tasks;
       })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA !== dateB) {
+            return dateA - dateB;
+        }
+        // If dates are the same, sort by the original process step order
+        const indexA = processSteps.findIndex(p => p.id === a.stepId);
+        const indexB = processSteps.findIndex(p => p.id === b.stepId);
+        return indexA - indexB;
+      });
   }, [processSteps, specs]);
 
   const tabs = ['Overview', 'Specs', 'Process Flow', 'Attendees'];
