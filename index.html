@@ -40,14 +40,31 @@
           .no-print {
             display: none !important;
           }
-          /* Ensure cards and sections don't break across pages */
-          .print-break-inside-avoid {
-            break-inside: avoid;
+          
+          /* Show all tab content by default when printing, overriding the 'hidden' class */
+          .tab-content > div {
+            display: block !important;
           }
-          /* Remove shadows and excessive borders for cleaner output */
+
+          /* Then, explicitly hide the sections we don't want to print */
+          .tab-content > div:nth-child(2), /* Specs */
+          .tab-content > div:nth-child(3)  /* Process Flow */
+          {
+            display: none !important;
+          }
+
+          /* Allow major sections (TabContentWrapper) to break across pages.
+             This is the key fix to prevent large empty gaps at the bottom of a page. */
+          .tab-content > div > .mb-10 {
+             break-inside: auto !important;
+          }
+          
+          /* Remove shadows for cleaner output */
           .shadow-md, .shadow-lg, .shadow-inner {
             box-shadow: none !important;
           }
+
+          /* Try to keep headings with their content */
            h1, h2, h3 {
             page-break-after: avoid;
           }
@@ -380,9 +397,9 @@ const Tabs = ({ tabs, activeTab, onTabClick }) => {
 
 
 // --- From components/TabContentWrapper.tsx ---
-const TabContentWrapper = ({ title, children, isFirstPrintSection = false, className = '' }) => {
+const TabContentWrapper = ({ title, children, className = '' }) => {
   return (
-    <div className={`mb-10 last:mb-0 ${isFirstPrintSection ? '' : 'print:break-before-page'} ${className}`}>
+    <div className={`mb-10 last:mb-0 print:break-inside-avoid ${className}`}>
       <h2 className="text-2xl font-bold text-amber-800 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">{title}</h2>
       {children}
     </div>
