@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1198,21 +1199,28 @@ const App = () => {
     { id: 'spec-dip-general', title: 'DIP Spec', items: {} }
   ];
   const initialProcessSteps = [
-    { id: 'step-bom', name: 'BOM 確認', details: 'Bill of Materials creation and finalization.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-receiving', name: '料到', details: 'Receiving and incoming inspection of all components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-pcb', name: 'PCB到', details: 'Receiving and incoming inspection of bare PCBs. (WITH SAMPLE?)', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-pcb' },
+    // Active Steps
     { id: 'step-smt', name: 'SMT', details: 'Surface Mount Technology assembly process.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-smt' },
     { id: 'step-aoi', name: 'SMT 目檢', details: 'Visual inspection of SMT components and solder joints.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
-    { id: 'step-pressfit', name: '壓合', details: 'Press-fit component assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-assembly' },
-    { id: 'step-dip', name: '插件', details: 'Through-hole component insertion.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-general' },
-    { id: 'step-manual-solder', name: '手焊', details: 'Manual soldering of specific components.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
-    { id: 'step-wash', name: '水洗', details: 'Washing, Cleaning PCBA to remove flux and contaminants.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: null },
-    { id: 'step-fw-flash', name: '燒錄', details: 'Firmware flashing and verification.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-firmware' },
-    { id: 'step-ict', name: '飛針', details: 'Fly Probe testing.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-tooling' },
     { id: 'step-assy', name: '組裝', details: 'Final product assembly.', type: 'process', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-mechanical' },
     { id: 'step-final-test', name: '成品測試', details: 'Final functional testing of the assembled product.', type: 'test', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
     { id: 'step-qc', name: 'QC', details: 'Final quality control inspection.', type: 'qc', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-quality' },
-    { id: 'step-pack', name: '包裝', details: 'Packaging for shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-packaging' }
+    { id: 'step-pack', name: '包裝', details: 'Packaging for shipment.', type: 'pack', isActive: true, startDate: '', endDate: '', relatedSpecId: 'spec-packaging' },
+    
+    // Inactive Steps
+    { id: 'step-bom', name: 'BOM 確認', details: 'Bill of Materials creation and finalization.', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-receiving', name: '料到', details: 'Receiving and incoming inspection of all components.', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-pcb', name: 'PCB到', details: 'Receiving and incoming inspection of bare PCBs. (WITH SAMPLE?)', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-pcb' },
+    { id: 'step-pressfit', name: '壓合', details: 'Press-fit component assembly.', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-assembly' },
+    { id: 'step-dip', name: '插件', details: 'Through-hole component insertion.', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-dip-general' },
+    { id: 'step-manual-solder', name: '手焊', details: 'Manual soldering of specific components.', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-dip-manual' },
+    { id: 'step-wash', name: '水洗', details: 'Washing, Cleaning PCBA to remove flux and contaminants.', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-fw-flash', name: '燒錄', details: 'Firmware flashing and verification.', type: 'test', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-firmware' },
+    { id: 'step-ict', name: '飛針', details: 'Fly Probe testing.', type: 'test', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-tooling' },
+    { id: 'step-med-cleanroom', name: 'Cleanroom Assy', details: 'Assembly of components in a controlled cleanroom environment (e.g., ISO 7, ISO 8).', type: 'process', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-assembly' },
+    { id: 'step-shipping', name: 'Shipping', details: 'Preparing and executing shipment to the customer.', type: 'pack', isActive: false, startDate: '', endDate: '', relatedSpecId: null },
+    { id: 'step-sw-qa', name: 'QA Testing', details: 'System-wide Quality Assurance testing, including regression and user acceptance testing (UAT).', type: 'test', isActive: false, startDate: '', endDate: '', relatedSpecId: 'spec-test' },
+    { id: 'step-sw-deploy', name: 'Deployment', details: 'Releasing the software build to production or staging environments.', type: 'pack', isActive: false, startDate: '', endDate: '', relatedSpecId: null },
   ];
 
   const getInitialState = () => {
@@ -1706,7 +1714,7 @@ const App = () => {
           </main>
       </div>
       <footer className="text-center text-xs text-gray-400 dark:text-slate-500 py-4 no-print">
-        ver-1.1
+        ver-1.2
       </footer>
     </>
   );
