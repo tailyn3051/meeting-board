@@ -1390,9 +1390,24 @@ const App = () => {
   };
   
   const handleBulkStepDateChange = (stepIds, key, value) => {
-    setProcessSteps(prev => prev.map(step => 
-        stepIds.includes(step.id) ? { ...step, [key]: value } : step
-    ));
+    setProcessSteps(prev => {
+        const updatedSteps = prev.map(step =>
+            stepIds.includes(step.id) ? { ...step, [key]: value } : step
+        );
+        // Now, re-sort the active steps chronologically
+        const activeSteps = updatedSteps.filter(s => s.isActive);
+        const inactiveSteps = updatedSteps.filter(s => !s.isActive);
+
+        activeSteps.sort((a, b) => {
+            // Steps with no start date should be pushed to the end
+            const dateA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+            const dateB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+            if (dateA !== dateB) return dateA - dateB;
+            return 0; // Maintain original order for steps with same/no date
+        });
+
+        return [...activeSteps, ...inactiveSteps];
+    });
   };
   
   const handleToggleStep = (stepId) => {
@@ -1513,11 +1528,10 @@ const App = () => {
           let activeSteps = allSteps.filter(s => s.isActive);
           const inactiveSteps = allSteps.filter(s => !s.isActive);
           
-          // 3. Re-sort all active steps chronologically. This is the simplest and most reliable
-          //    way to ensure the process flow always matches the schedule's visual order.
+          // 3. Re-sort all active steps chronologically, pushing undated items to the end.
           activeSteps.sort((a, b) => {
-              const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-              const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+              const dateA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+              const dateB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
               if (dateA !== dateB) return dateA - dateB;
               
               // Fallback for items on the same day (should be rare, but good for stability)
