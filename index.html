@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -77,6 +76,15 @@
 
     <!-- Main Application Script -->
     <script type="text/babel" data-type="module">
+// --- Date Helper ---
+const toYYYYMMDD = (date) => {
+    if (!date || !(date instanceof Date)) return '';
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 // --- From types.ts ---
 interface ProjectDetails {
   id: string;
@@ -169,6 +177,16 @@ const EditableField = ({
       setIsEditing(false);
     }
   };
+  
+  const handleClick = (e) => {
+    // Distinguish between single and double clicks.
+    if (e.detail === 2) {
+      e.stopPropagation(); // Stop the second click from bubbling to selection handler
+      setIsEditing(true);
+    }
+    // On a single click (e.detail === 1), we do nothing and let the event bubble
+    // up to the parent element which handles selection.
+  };
 
   if (isEditing) {
     const commonProps = {
@@ -204,9 +222,9 @@ const EditableField = ({
 
   return (
     <Component
-      onDoubleClick={() => setIsEditing(true)}
+      onClick={handleClick}
       className={`${className} transition-colors cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-500/10 rounded-md p-1 -m-1`}
-      title="Double-click to edit"
+      title="Click to select, Double-click to edit"
       style={ isTextarea ? { whiteSpace: 'pre-wrap', minHeight: '1.5em' } : {}}
     >
       {displayValue || <span className="text-gray-400 dark:text-slate-500">(empty)</span>}
@@ -227,7 +245,7 @@ const Card = ({ title, children, className = '' }) => {
 
 
 // --- From components/Calendar.tsx ---
-const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true }) => {
+const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true, holidays = [], highlightedRanges = [] }) => {
   const { useState } = React;
   const [currentDate, setCurrentDate] = useState(selectedDate || new Date());
 
@@ -268,6 +286,27 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
     });
   };
 
+  const isHoliday = (day) => {
+    if (!holidays || holidays.length === 0) return false;
+    const checkDate = new Date(year, month, day);
+    const dateString = toYYYYMMDD(checkDate);
+    return holidays.includes(dateString);
+  };
+
+  const isHighlighted = (day) => {
+    if (highlightedRanges.length === 0) return false;
+    const checkDate = new Date(year, month, day);
+    checkDate.setHours(12, 0, 0, 0); // Check noon to avoid timezone edge cases
+    return highlightedRanges.some(range => {
+        if (!range.start || !range.end) return false;
+        const startDate = new Date(range.start);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(range.end);
+        endDate.setHours(23, 59, 59, 999);
+        return checkDate >= startDate && checkDate <= endDate;
+    });
+  };
+
   const isSelectedDay = (day) => {
     if (!selectedDate) return false;
     return selectedDate.getDate() === day &&
@@ -283,17 +322,23 @@ const Calendar = ({ events = [], onDateClick, selectedDate, showEvents = true })
     const isEvent = isEventDay(day);
     const isCurrent = isToday(day);
     const isSelected = isSelectedDay(day);
+    const isHol = isHoliday(day);
+    const isHighlight = isHighlighted(day);
 
     let dayClass = 'p-2 flex items-center justify-center h-10 w-10 rounded-full cursor-pointer transition-colors duration-200';
-    if (isEvent) {
+    if (isHol) {
+      dayClass += ' bg-gray-200 dark:bg-slate-600 text-gray-400 dark:text-slate-500 line-through';
+    } else if (isHighlight) {
+        dayClass += ' bg-blue-500 text-white font-semibold dark:bg-blue-600';
+    } else if (isEvent) {
       dayClass += ' bg-amber-500 text-white font-bold';
     } else if (isCurrent) {
-      dayClass += ' bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-300 font-bold';
+      dayClass += ' bg-green-500 text-white font-bold dark:bg-green-600';
     } else {
       dayClass += ' text-gray-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-700';
     }
     if (isSelected) {
-      dayClass += ' ring-2 ring-blue-500 ring-offset-1';
+      dayClass += ' ring-2 ring-amber-500 ring-offset-1';
     }
 
     days.push(
@@ -442,7 +487,7 @@ const AttendeesTab = ({ attendees, onAttendeesChange, date, onDateChange }) => {
 
 
 // --- Modified Component: ScheduleTimelineView ---
-const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = '' }) => {
+const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = '', holidays = [], selectedStepIds = [] }) => {
     const { useMemo, useState } = React;
     const [dragOverStepId, setDragOverStepId] = useState(null);
 
@@ -496,14 +541,11 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
         e.preventDefault();
         const draggedStepId = e.dataTransfer.getData('stepId');
         const tasksOnDate = tasksByDate[date] || [];
-        // If dropping on column, target is the last item on that day for reordering purposes.
-        // If empty, target is null, which means just change date and sort chronologically.
-        const lastTaskOnDate = tasksOnDate[tasksOnDate.length - 1];
-        const targetStepId = lastTaskOnDate ? lastTaskOnDate.stepId : null;
+        // If dropping on column, target is null, which means just change date and sort chronologically.
         if (draggedStepId) {
             // Avoid dropping on self if it's the only item in the column
             if (tasksOnDate.length === 1 && tasksOnDate[0].stepId === draggedStepId) return;
-            onTaskReorder(draggedStepId, targetStepId, date);
+            onTaskReorder(draggedStepId, null, date);
         }
         setDragOverStepId(null);
     };
@@ -515,6 +557,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                 {sortedDates.map(date => {
                     const tasksOnDate = tasksByDate[date];
                     const firstTask = tasksOnDate && tasksOnDate.length > 0 ? tasksOnDate[0] : null;
+                    const isHoliday = holidays && holidays.includes(date);
                     if (!firstTask) return null; // Defensive check for empty date columns
 
                     return (
@@ -522,15 +565,16 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                             key={date}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleColumnDrop(e, date)}
-                            className={`w-64 flex-shrink-0 bg-amber-50/70 dark:bg-slate-800/50 rounded-xl shadow-lg border border-amber-100 dark:border-slate-700 flex flex-col h-full print:break-inside-avoid`}
+                            className={`w-64 flex-shrink-0 rounded-xl shadow-lg border flex flex-col h-full print:break-inside-avoid transition-colors duration-300 ${isHoliday ? 'bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-600' : 'bg-amber-50/70 dark:bg-slate-800/50 border-amber-100 dark:border-slate-700'}`}
                         >
-                            <div className="p-3 bg-amber-100 dark:bg-slate-700 rounded-t-xl border-b border-amber-200 dark:border-slate-600 sticky top-0 z-10">
-                                <h3 className="font-bold text-lg text-amber-900 dark:text-amber-400">{date}</h3>
+                            <div className={`p-3 rounded-t-xl border-b sticky top-0 z-10 ${isHoliday ? 'bg-gray-200 dark:bg-slate-700/50 border-gray-300 dark:border-slate-600' : 'bg-amber-100 dark:bg-slate-700 border-amber-200 dark:border-slate-600'}`}>
+                                <h3 className={`font-bold text-lg ${isHoliday ? 'text-gray-700 dark:text-slate-300' : 'text-amber-900 dark:text-amber-400'}`}>{date}</h3>
                                 <p className="text-sm text-gray-600 dark:text-slate-400">{firstTask.day}</p>
                             </div>
                             <div className="p-2 space-y-2 overflow-y-auto flex-1">
                                 {tasksOnDate.map((task) => {
                                     const timeRange = task.isMultiDay ? task.notes.match(/\(([^)]+)\)/)?.[1] || '' : `${task.startTime} - ${task.endTime}`;
+                                    const isSelected = selectedStepIds.includes(task.stepId);
                                     return (
                                         <div 
                                             key={task.id} 
@@ -539,7 +583,7 @@ const ScheduleTimelineView = ({ tasks, onTaskChange, onTaskReorder, className = 
                                             onDragOver={(e) => handleDragOver(e, task.stepId)}
                                             onDragLeave={handleDragLeave}
                                             onDrop={(e) => handleItemDrop(e, task.stepId, date)}
-                                            className={`bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${dragOverStepId === task.stepId ? 'ring-2 ring-blue-500' : ''}`}
+                                            className={`bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 group relative cursor-move transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${dragOverStepId === task.stepId ? 'ring-2 ring-blue-500' : ''} ${isSelected ? 'ring-4 ring-blue-500' : ''}`}
                                             title={task.notes}
                                         >
                                             <EditableField 
@@ -733,12 +777,8 @@ const SpecsTab = ({ specs, onSpecChange, onAddSpec, onDeleteSpec, onAddSpecItem,
 
 
 // --- From components/ProcessFlowTab.tsx ---
-const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepChange, onBulkStepDateChange, onAddStep, onDeleteStep, onToggleStep, onReorderSteps, onLinkStepToSpec }) => {
+const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepChange, onBulkStepDateChange, onAddStep, onDeleteStep, onToggleStep, onReorderSteps, onLinkStepToSpec, holidays, onHolidayToggle, selectedStepIds, onSelectionChange }) => {
   const { useState, useMemo, useEffect } = React;
-  const [selectedStepIds, setSelectedStepIds] = useState(() => {
-    const firstActive = steps.find(s => s.isActive);
-    return firstActive ? [firstActive.id] : [];
-  });
   const [draggedItemId, setDraggedItemId] = useState(null);
   const [editingDateField, setEditingDateField] = useState('startDate');
   const [isLinkingSpec, setIsLinkingSpec] = useState(false);
@@ -748,7 +788,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
         steps.find(step => step.id === id)?.isActive
     );
     if (currentlyActiveSelection.length !== selectedStepIds.length) {
-        setSelectedStepIds(currentlyActiveSelection);
+        onSelectionChange(currentlyActiveSelection);
     }
   }, [steps, selectedStepIds]);
 
@@ -794,17 +834,18 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
   
   const handleStepSelect = (stepId, isMultiSelect) => {
     if (isMultiSelect) {
-        setSelectedStepIds(prev => 
+        onSelectionChange(prev => 
             prev.includes(stepId) 
                 ? prev.filter(id => id !== stepId)
                 : [...prev, stepId]
         );
     } else {
-        // Prevent re-render if this step is already the only one selected
+        // If clicking the only selected step, deselect it. Otherwise, select it.
         if (selectedStepIds.length === 1 && selectedStepIds[0] === stepId) {
-            return;
+            onSelectionChange([]); // Deselect
+        } else {
+            onSelectionChange([stepId]); // Select
         }
-        setSelectedStepIds([stepId]);
     }
   };
 
@@ -840,6 +881,8 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
         if (editingDateField === 'startDate') {
             setEditingDateField('endDate');
         }
+    } else if (onHolidayToggle) {
+        onHolidayToggle(date);
     }
   };
   
@@ -853,6 +896,19 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
     }
     return null;
   }, [selectedStepIds, steps, editingDateField]);
+  
+  const selectedRangesForCalendar = useMemo(() => {
+    if (selectedStepIds.length === 0) return [];
+    return selectedStepIds.map(id => {
+        const step = steps.find(s => s.id === id);
+        if (step && step.startDate && step.endDate) {
+            try {
+                return { start: new Date(step.startDate), end: new Date(step.endDate) };
+            } catch { return null; }
+        }
+        return null;
+    }).filter(Boolean);
+  }, [selectedStepIds, steps]);
   
   const getCommonDateValue = (field) => {
       if (selectedStepIds.length === 0) return '';
@@ -870,10 +926,18 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
     const isSelected = selectedStepIds.includes(step.id);
     const isFirst = index === 0;
     const isLast = index === totalActiveSteps - 1;
+    const isScheduled = step.startDate && step.endDate;
 
-    let bgColor = 'bg-teal-500 hover:bg-teal-600';
-    if (isFirst) bgColor = 'bg-sky-500 hover:bg-sky-600';
-    if (isLast) bgColor = 'bg-emerald-500 hover:bg-emerald-600';
+    let bgColor;
+    if (isScheduled) {
+        bgColor = 'bg-teal-600 hover:bg-teal-700';
+        if (isFirst) bgColor = 'bg-teal-500 hover:bg-teal-600';
+        if (isLast) bgColor = 'bg-teal-700 hover:bg-teal-800';
+    } else {
+        bgColor = 'bg-orange-500 hover:bg-orange-600';
+        if (isFirst) bgColor = 'bg-orange-400 hover:bg-orange-500';
+        if (isLast) bgColor = 'bg-orange-600 hover:bg-orange-700';
+    }
 
     let clipPathStyle = {};
     if (totalActiveSteps > 1) {
@@ -890,8 +954,8 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
         onDrop={(e) => handleDrop(e, step.id)}
         onDragEnd={handleDragEnd}
         onClick={(e) => handleStepSelect(step.id, e.ctrlKey || e.metaKey)}
-        className={`group/step relative flex items-center justify-start h-12 text-white font-semibold transition-all duration-200 cursor-move ${bgColor}`}
-        style={{ ...clipPathStyle, filter: isSelected ? 'drop-shadow(0 0 8px #f59e0b)' : 'none', paddingLeft: isFirst || totalActiveSteps === 1 ? '1rem' : '2.25rem', paddingRight: isLast || totalActiveSteps === 1 ? '1rem' : '2.25rem' }}
+        className={`group/step relative flex items-center justify-start h-12 text-white font-semibold transition-all duration-200 cursor-move ${bgColor} ${isSelected ? 'ring-4 ring-offset-2 ring-blue-500 dark:ring-offset-slate-900' : ''}`}
+        style={{ ...clipPathStyle, paddingLeft: isFirst || totalActiveSteps === 1 ? '1rem' : '2.25rem', paddingRight: isLast || totalActiveSteps === 1 ? '1rem' : '2.25rem' }}
       >
         <div className="relative z-10 flex items-center gap-2">
             <button
@@ -921,7 +985,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
 
   return (
     <section className="space-y-6">
-      <p className="text-base text-gray-700 dark:text-slate-300">This is the complete manufacturing and quality control flow for {projectId}. Drag steps to reorder, click the status icon to activate/deactivate, double-click names to edit, or click a step to view details. Use <strong>Ctrl/Cmd + Click</strong> to select multiple steps.</p>
+      <p className="text-base text-gray-700 dark:text-slate-300">This is the complete manufacturing and quality control flow for {projectId}. Drag steps to reorder, click the status icon to activate/deactivate, double-click names to edit, or click a step to view details. Click a selected step again to deselect it (enabling holiday marking on the calendar). Use <strong>Ctrl/Cmd + Click</strong> to select multiple steps.</p>
       <div className="bg-white dark:bg-slate-800/50 p-4 md:p-6 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 print:break-inside-avoid">
         <EditableField as="h2" initialValue={title} onSave={onTitleChange} className="text-xl font-semibold mb-12 text-amber-900 dark:text-amber-400 text-center" inputClassName="text-xl font-semibold text-center" />
         <div className="flex flex-wrap items-center justify-center gap-2 py-4">
@@ -948,8 +1012,8 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
                         <div>
                             <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">相關規格 (Related Specs):</h3>
                             {isLinkingSpec && selectedStep ? (
-                                <div className="bg-white dark:bg-slate-600 p-4 rounded-lg shadow-inner border border-blue-400 h-full mt-2 no-print">
-                                    <select value={selectedStep.relatedSpecId || ''} onChange={(e) => { onLinkStepToSpec(selectedStep.id, e.target.value || null); setIsLinkingSpec(false); }} onBlur={() => setIsLinkingSpec(false)} autoFocus className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-600">
+                                <div className="bg-white dark:bg-slate-600 p-4 rounded-lg shadow-inner border border-amber-400 h-full mt-2 no-print">
+                                    <select value={selectedStep.relatedSpecId || ''} onChange={(e) => { onLinkStepToSpec(selectedStep.id, e.target.value || null); setIsLinkingSpec(false); }} onBlur={() => setIsLinkingSpec(false)} autoFocus className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-600">
                                         <option value="" className="text-gray-500">-- No Related Spec --</option>
                                         {specs.map(spec => <option key={spec.id} value={spec.id} className="text-black bg-white dark:text-white dark:bg-slate-600">{spec.title}</option>)}
                                     </select>
@@ -972,11 +1036,11 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
                     </div>
                     {selectedStepIds.length > 0 && (
                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 border-t border-amber-200 dark:border-slate-700 pt-6 no-print">
-                            <div onClick={() => setEditingDateField('startDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'startDate' ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
+                            <div onClick={() => setEditingDateField('startDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'startDate' ? 'ring-2 ring-amber-500 ring-offset-1' : ''}`}>
                                 <h4 className="text-sm font-semibold text-gray-600 dark:text-slate-400 mb-1">Start Date/Time</h4>
                                 <EditableField type="datetime-local" initialValue={getCommonDateValue('startDate')} onSave={(v) => onBulkStepDateChange(selectedStepIds, 'startDate', v)} className="p-2 border dark:border-slate-600 rounded-md w-full" inputClassName="p-2" />
                             </div>
-                            <div onClick={() => setEditingDateField('endDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'endDate' ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}>
+                            <div onClick={() => setEditingDateField('endDate')} className={`rounded-lg cursor-pointer p-1 transition-all ${editingDateField === 'endDate' ? 'ring-2 ring-amber-500 ring-offset-1' : ''}`}>
                                 <h4 className="text-sm font-semibold text-gray-600 dark:text-slate-400 mb-1">End Date/Time</h4>
                                 <EditableField type="datetime-local" initialValue={getCommonDateValue('endDate')} onSave={(v) => onBulkStepDateChange(selectedStepIds, 'endDate', v)} className="p-2 border dark:border-slate-600 rounded-md w-full" inputClassName="p-2" />
                             </div>
@@ -986,7 +1050,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
                 <div className="lg:col-span-1 no-print">
                     <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-400 mb-2">專案日曆 (Project Calendar):</h3>
                     <div className="bg-white dark:bg-slate-700/50 p-4 rounded-lg shadow-inner border border-amber-200 dark:border-slate-700 mt-2">
-                        <Calendar events={steps} onDateClick={handleDateSelect} selectedDate={selectedDateForCalendar} />
+                        <Calendar events={steps} onDateClick={handleDateSelect} selectedDate={selectedDateForCalendar} holidays={holidays} highlightedRanges={selectedRangesForCalendar} />
                     </div>
                 </div>
             </div>
@@ -998,7 +1062,7 @@ const ProcessFlowTab = ({ steps, specs, projectId, title, onTitleChange, onStepC
 
 
 // --- From components/OverviewTab.tsx ---
-const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks, onScheduleTaskChange, onReorderStep, onSpecChange, onSpecItemKeyChange }) => {
+const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSpecs, processFlowTitle, scheduleTasks, onScheduleTaskChange, onReorderStep, onSpecChange, onSpecItemKeyChange, holidays, selectedStepIds }) => {
     const { useState, useMemo } = React;
     const [draggedSpecId, setDraggedSpecId] = useState(null);
 
@@ -1014,7 +1078,17 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
         return specs.filter(spec => relatedSpecIds.has(spec.id));
     }, [specs, relatedSpecIds]);
     
-    const activeSteps = useMemo(() => processSteps.filter(s => s.isActive), [processSteps]);
+    const activeSteps = useMemo(() => {
+        const sortedActiveSteps = processSteps.filter(s => s.isActive);
+        // Sort chronologically, putting items without a date at the end
+        sortedActiveSteps.sort((a, b) => {
+            const dateA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+            const dateB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+            if (dateA !== dateB) return dateA - dateB;
+            return 0; // Maintain original order for items with the same or no date
+        });
+        return sortedActiveSteps;
+    }, [processSteps]);
 
     const handleDragStart = (e, id) => {
         setDraggedSpecId(id);
@@ -1053,10 +1127,18 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
     const ProcessFlowDiagramNode = ({ step, index, totalActiveSteps }) => {
         const isFirst = index === 0;
         const isLast = index === totalActiveSteps - 1;
+        const isScheduled = step.startDate && step.endDate;
 
-        let bgColor = 'bg-teal-500';
-        if (isFirst) bgColor = 'bg-sky-500';
-        if (isLast) bgColor = 'bg-emerald-500';
+        let bgColor;
+        if (isScheduled) {
+            bgColor = 'bg-teal-600';
+            if (isFirst) bgColor = 'bg-teal-500';
+            if (isLast) bgColor = 'bg-teal-700';
+        } else {
+            bgColor = 'bg-orange-500';
+            if (isFirst) bgColor = 'bg-orange-400';
+            if (isLast) bgColor = 'bg-orange-600';
+        }
 
         let clipPathStyle = {};
         if (totalActiveSteps > 1) {
@@ -1168,6 +1250,8 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                             tasks={scheduleTasks} 
                             onTaskChange={onScheduleTaskChange}
                             onTaskReorder={onReorderStep}
+                            holidays={holidays}
+                            selectedStepIds={selectedStepIds}
                          />
                     </div>
                 </div>
@@ -1246,6 +1330,7 @@ const App = () => {
                 processSteps: parsed.processSteps,
                 attendees: Array.isArray(parsed.attendees) ? parsed.attendees : [],
                 meetingDate: parsed.meetingDate || new Date().toISOString().slice(0, 10),
+                holidays: Array.isArray(parsed.holidays) ? parsed.holidays : [],
             };
         }
       }
@@ -1263,6 +1348,7 @@ const App = () => {
       processSteps: initialProcessSteps,
       attendees: [],
       meetingDate: new Date().toISOString().slice(0, 10),
+      holidays: [],
     };
   };
 
@@ -1274,7 +1360,9 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('Overview');
   const [attendees, setAttendees] = useState(getInitialState().attendees);
   const [meetingDate, setMeetingDate] = useState(getInitialState().meetingDate);
+  const [holidays, setHolidays] = useState(getInitialState().holidays);
   const [processFlowTitle, setProcessFlowTitle] = useState("Manufacturing Process Flow");
+  const [selectedStepIds, setSelectedStepIds] = useState([]);
 
 
   useEffect(() => {
@@ -1285,14 +1373,15 @@ const App = () => {
       specs,
       processSteps,
       attendees,
-      meetingDate
+      meetingDate,
+      holidays
     };
     try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stateToSave));
     } catch (error) {
         console.error("Failed to save state to localStorage:", error);
     }
-  }, [appTitle, projectName, projectDetails, specs, processSteps, attendees, meetingDate]);
+  }, [appTitle, projectName, projectDetails, specs, processSteps, attendees, meetingDate, holidays]);
 
   const handleReset = () => {
     if (window.confirm("Are you sure you want to reset all data? This cannot be undone.")) {
@@ -1304,7 +1393,9 @@ const App = () => {
         setProcessSteps(initialProcessSteps);
         setAttendees([]);
         setMeetingDate(new Date().toISOString().slice(0, 10));
+        setHolidays([]);
         setActiveTab('Overview');
+        setSelectedStepIds([]);
     }
   };
   
@@ -1493,53 +1584,107 @@ const App = () => {
   };
 
   const handleReorderProcessStep = (draggedStepId, targetStepId, newDateStr) => {
-      if (!draggedStepId) return;
+    if (!draggedStepId) return;
+  
+    setProcessSteps(prevSteps => {
+        const allSteps = [...prevSteps];
+        const draggedStepOriginal = allSteps.find(s => s.id === draggedStepId);
+        if (!draggedStepOriginal || !draggedStepOriginal.startDate || !draggedStepOriginal.endDate) {
+            return prevSteps;
+        }
+  
+        // Helper function to add a number of working days to a date, skipping holidays.
+        const addWorkingDays = (startDate, numDays, holidays) => {
+            let currentDate = new Date(startDate);
+            let daysAdded = 0;
+            if (numDays <= 0) return currentDate;
+            while (daysAdded < numDays) {
+                currentDate.setDate(currentDate.getDate() + 1);
+                if (!holidays.includes(toYYYYMMDD(currentDate))) {
+                    daysAdded++;
+                }
+            }
+            return currentDate;
+        };
+  
+        try {
+            const oldStartDate = new Date(draggedStepOriginal.startDate);
+            const oldEndDate = new Date(draggedStepOriginal.endDate);
+  
+            // 1. Calculate original duration in working days.
+            let workingDayCount = 0;
+            let tempDate = new Date(oldStartDate);
+            tempDate.setHours(0, 0, 0, 0);
+            let tempEndDate = new Date(oldEndDate);
+            tempEndDate.setHours(0, 0, 0, 0);
+  
+            if (tempDate > tempEndDate) return prevSteps;
+  
+            while (tempDate <= tempEndDate) {
+                if (!holidays.includes(toYYYYMMDD(tempDate))) {
+                    workingDayCount++;
+                }
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+            // Ensure single-day tasks have a count of at least 1.
+            if (workingDayCount === 0 && !holidays.includes(toYYYYMMDD(oldStartDate))) {
+                workingDayCount = 1;
+            }
+            if (workingDayCount < 1) workingDayCount = 1;
+  
+            // 2. Determine new start date, snapping to next working day if dropped on a holiday.
+            let newStartDate = new Date(`${newDateStr}T00:00:00`);
+            newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
+            
+            while(holidays.includes(toYYYYMMDD(newStartDate))) {
+                newStartDate.setDate(newStartDate.getDate() + 1);
+            }
+  
+            // 3. Calculate new end date based on working day duration.
+            let newEndDate;
+            if (workingDayCount <= 1) {
+                newEndDate = new Date(newStartDate);
+                newEndDate.setHours(oldEndDate.getHours(), oldEndDate.getMinutes(), oldEndDate.getSeconds());
+            } else {
+                const lastDay = addWorkingDays(newStartDate, workingDayCount - 1, holidays);
+                newEndDate = new Date(lastDay);
+                newEndDate.setHours(oldEndDate.getHours(), oldEndDate.getMinutes(), oldEndDate.getSeconds());
+            }
 
-      setProcessSteps(prevSteps => {
-          let allSteps = [...prevSteps];
-          const draggedStepOriginal = allSteps.find(s => s.id === draggedStepId);
-          if (!draggedStepOriginal) return prevSteps;
-
-          // 1. Create a mutable, updated version of the step with its new date
-          const updatedDraggedStep = { ...draggedStepOriginal };
-          if (newDateStr) {
-              try {
-                  const oldStartDate = new Date(draggedStepOriginal.startDate || Date.now());
-                  const oldEndDate = new Date(draggedStepOriginal.endDate || Date.now());
-                  const duration = oldEndDate.getTime() - oldStartDate.getTime();
-
-                  const newStartDate = new Date(`${newDateStr}T00:00:00`);
-                  newStartDate.setHours(oldStartDate.getHours(), oldStartDate.getMinutes(), oldStartDate.getSeconds());
-                  
-                  const newEndDate = new Date(newStartDate.getTime() + duration);
-
-                  updatedDraggedStep.startDate = formatToDateTimeLocal(newStartDate);
-                  updatedDraggedStep.endDate = formatToDateTimeLocal(newEndDate);
-              } catch (e) {
-                  console.error("Error calculating new date for dragged step:", e);
-                  return prevSteps; // Abort on date error
-              }
-          }
-          
-          // Temporarily update the step in the main array to have its new date for sorting
-          allSteps = allSteps.map(s => s.id === draggedStepId ? updatedDraggedStep : s);
-          
-          // 2. Separate active and inactive steps for reordering
-          let activeSteps = allSteps.filter(s => s.isActive);
-          const inactiveSteps = allSteps.filter(s => !s.isActive);
-          
-          // 3. Re-sort all active steps chronologically, pushing undated items to the end.
-          activeSteps.sort((a, b) => {
-              const dateA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
-              const dateB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
-              if (dateA !== dateB) return dateA - dateB;
-              
-              // Fallback for items on the same day (should be rare, but good for stability)
-              return 0; 
-          });
-          
-          return [...activeSteps, ...inactiveSteps];
-      });
+            // Update the step with new dates.
+            const updatedDraggedStep = {
+                ...draggedStepOriginal,
+                startDate: formatToDateTimeLocal(newStartDate),
+                endDate: formatToDateTimeLocal(newEndDate)
+            };
+    
+            const otherSteps = allSteps.filter(s => s.id !== draggedStepId);
+            const finalSteps = [...otherSteps, updatedDraggedStep];
+            
+            // Re-sort all active steps chronologically.
+            const activeSteps = finalSteps.filter(s => s.isActive);
+            const inactiveSteps = finalSteps.filter(s => !s.isActive);
+            activeSteps.sort((a, b) => {
+                const dateA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+                const dateB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+                return dateA - dateB;
+            });
+    
+            return [...activeSteps, ...inactiveSteps];
+        } catch (e) {
+            console.error("Error calculating new date for dragged step:", e);
+            return prevSteps; // Abort on date error
+        }
+    });
+  };
+  
+  const handleHolidayToggle = (dateToToggle) => {
+    const dateString = toYYYYMMDD(dateToToggle);
+    setHolidays(prev =>
+      prev.includes(dateString)
+        ? prev.filter(d => d !== dateString)
+        : [...prev, dateString]
+    );
   };
 
   const scheduleTasks = useMemo(() => {
@@ -1613,7 +1758,17 @@ const App = () => {
       });
   }, [processSteps, specs]);
   
-  const activeSteps = useMemo(() => processSteps.filter(s => s.isActive), [processSteps]);
+  const activeSteps = useMemo(() => {
+    const sortedActive = processSteps.filter(s => s.isActive);
+    sortedActive.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+        if (dateA !== dateB) return dateA - dateB;
+        return 0;
+    });
+    return sortedActive;
+  }, [processSteps]);
+
   const relatedSpecIds = useMemo(() => {
     const ids = new Set();
     processSteps
@@ -1630,9 +1785,9 @@ const App = () => {
   const PrintProcessFlowDiagramNode = ({ step, index, totalActiveSteps }) => {
     const isFirst = index === 0;
     const isLast = index === totalActiveSteps - 1;
-    let bgColor = 'bg-teal-500';
-    if (isFirst) bgColor = 'bg-sky-500';
-    if (isLast) bgColor = 'bg-emerald-500';
+    let bgColor = 'bg-orange-500';
+    if (isFirst) bgColor = 'bg-orange-400';
+    if (isLast) bgColor = 'bg-orange-600';
 
     let clipPathStyle = {};
     if (totalActiveSteps > 1) {
@@ -1680,6 +1835,8 @@ const App = () => {
                       onReorderStep={handleReorderProcessStep}
                       onSpecChange={handleSpecChange}
                       onSpecItemKeyChange={handleSpecItemKeyChange}
+                      holidays={holidays}
+                      selectedStepIds={selectedStepIds}
                   />
               </div>
               <div className={activeTab !== 'Specs' ? 'hidden' : ''}>
@@ -1711,6 +1868,10 @@ const App = () => {
                           onToggleStep={handleToggleStep}
                           onReorderSteps={handleReorderSteps}
                           onLinkStepToSpec={handleLinkStepToSpec}
+                          holidays={holidays}
+                          onHolidayToggle={handleHolidayToggle}
+                          selectedStepIds={selectedStepIds}
+                          onSelectionChange={setSelectedStepIds}
                       />
                   </TabContentWrapper>
                </div>
@@ -1728,7 +1889,7 @@ const App = () => {
           </main>
       </div>
       <footer className="text-center text-xs text-gray-400 dark:text-slate-500 py-4 no-print">
-        ver-1.2
+        ver-1.4
       </footer>
     </>
   );
