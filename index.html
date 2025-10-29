@@ -1194,11 +1194,11 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
             </div>
             
             {/* 3. Specs and Schedule */}
-            <div className="flex flex-col lg:flex-row lg:space-x-6 space-y-6 lg:space-y-0 print:flex-row print:space-x-4">
-                {/* Left Column: Thinner Related Specs */}
-                <div className="lg:w-1/4 xl:w-1/5 flex-shrink-0 print:w-1/4">
+            <div className="flex flex-col lg:flex-row lg:space-x-6 space-y-6 lg:space-y-0 print:flex-col print:space-y-6">
+                {/* Top Section: Horizontal Related Specs */}
+                <div className="lg:w-1/4 xl:w-1/5 flex-shrink-0 print:w-full">
                     <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Related Specs</h3>
-                    <div className="space-y-4">
+                    <div className="space-y-4 print:space-y-0 print:flex print:flex-row print:flex-wrap print:gap-4">
                         {relatedSpecs.length > 0 ? relatedSpecs.map(spec => (
                             <div 
                                 key={spec.id} 
@@ -1207,7 +1207,7 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                                 onDragOver={handleDragOver}
                                 onDrop={(e) => handleDrop(e, spec.id)}
                                 onDragEnd={handleDragEnd}
-                                className="bg-white dark:bg-slate-800/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 cursor-move transition-shadow"
+                                className="bg-white dark:bg-slate-800/50 p-4 rounded-lg shadow-md border border-amber-100 dark:border-slate-700 cursor-move transition-shadow print:flex-1 print:min-w-[240px]"
                             >
                                 <EditableField
                                     as="h4"
@@ -1242,8 +1242,8 @@ const OverviewTab = ({ details, onDetailChange, specs, processSteps, onReorderSp
                     </div>
                 </div>
 
-                {/* Right Column: Schedule Timeline */}
-                <div className="lg:w-3/4 xl:w-4/5 print:w-3/4">
+                {/* Bottom Section: Schedule Timeline */}
+                <div className="lg:w-3/4 xl:w-4/5 print:w-full">
                     <h3 className="text-xl font-bold text-amber-900 dark:text-amber-400 mb-4 pb-2 border-b border-amber-200 dark:border-slate-700">Schedule Timeline</h3>
                     <div className="h-[75vh] print:h-auto bg-white dark:bg-slate-800/50 p-1 rounded-lg shadow-md border border-amber-100 dark:border-slate-700">
                          <ScheduleTimelineView 
